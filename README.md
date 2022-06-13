@@ -6,5 +6,5 @@
 
 # tg
 
-library(dplyr)
-
+x <- c(1,2,3,4)
+y <- x
