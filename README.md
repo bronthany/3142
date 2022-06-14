@@ -9,7 +9,7 @@ summary(data)
 data$ï..accident_month <- as.Date(data$ï..accident_month)
 data$claim_loss_date <- as.Date(data$claim_loss_date)
 
-test <- na.omit(data)
+test <- na.omit(data) # Removed NA's
 
 class(data$ï..accident_month)
 class(data$claim_loss_date)
