@@ -55,3 +55,19 @@ while(i <= length(d2$"Import Index")){
   }
   i<-i+1
 }
+
+#### Adela - time series of Automotive fuel index number ####
+
+p <- ggplot(copy_data, aes(factor(Quart),index_number)) +
+  geom_line(aes(group=1),colour="red") + geom_point() + ggtitle("Automotive Fuel \n Index Number") +
+  xlab("Time") +ylab("Index Number") +
+  theme(plot.title = element_text(hjust = 0.5))
+  
+#### Adela - claim frequency and Automotive fuel index number ####
+
+x <- as.data.frame(copy_data %>% count(index_number))
+
+
+
+
+
