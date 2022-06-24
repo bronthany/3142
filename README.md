@@ -65,7 +65,11 @@ p <- ggplot(copy_data, aes(factor(Quart),index_number)) +
   
 #### Adela - claim frequency and Automotive fuel index number ####
 
-
+x <- as.data.frame(copy_data %>% count(index_number))
+index_ <- ggplot(x, aes(index_number,n)) +
+  geom_line(aes(group=1),colour="red") + geom_point() + ggtitle("Automotive Fuel Index Number \n v.s Claim frequency") +
+  xlab("Index Number") +ylab("Claim Frequency") +
+  theme(plot.title = element_text(hjust = 0.5))
 
 
 
