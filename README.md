@@ -65,8 +65,6 @@ p <- ggplot(copy_data, aes(factor(Quart),index_number)) +
   
 #### Adela - claim frequency and Automotive fuel index number ####
 
-x <- as.data.frame(copy_data %>% count(index_number))
-
 
 
 
