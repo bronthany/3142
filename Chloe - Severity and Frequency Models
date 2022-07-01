@@ -61,7 +61,7 @@ data_freq$vehicle_class <- factor(data_freq$vehicle_class)
 data_freq$risk_state_name <- factor(data_freq$risk_state_name)
 data_freq$year_of_manufacture <- factor(data_freq$year_of_manufacture)
 
-# Data Partition of original Dataset - 70% Training Data, 30% Test Data split
+# Data Partition of original Dataset
 data_partition <- data_freq
 data_partition <- data_partition$accident_month < as.Date("2020-07-31") 
 data_freq_train <- data_freq[data_partition,] 
@@ -146,6 +146,7 @@ data_claim <- data_claim %>%
   # Remove duplicated policy_id rows
   distinct(policy_id, .keep_all = TRUE) 
 
+# Data Split
 data_partition2 <- data_claim
 data_partition2 <- data_partition2$accident_month < as.Date("2020-07-31") 
 data_claim_train <- data_claim[data_partition2,] 
