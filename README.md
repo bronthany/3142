@@ -109,5 +109,60 @@ index_ <- ggplot(x, aes(index_number,n)) +
   xlab("Index Number") +ylab("Claim Frequency") +
   theme(plot.title = element_text(hjust = 0.5))
 
+#### CATHY - Adding extrapolated variable to d2 data frame ####
+# Read import index csv 
+import.index<-read.csv("import.index.csv",header=T)
+import.index$Date<-as.Date(import.index$Date)
+attach(import.index)
+
+# Package for converting dates into desirable format
+install.packages("lubridate")                        
+library("lubridate")
+
+# A vector containing dates of d2 in the format 1/month/year 
+data_months <- paste0(year(d2$accident_month), "/",        
+                         month(d2$accident_month),"/1")
+
+# The vector above is added onto d2 as a new column called Monthly_Date
+d2 <- d2 %>% mutate(Monthly_Date = as.Date(data_months))    
+
+# Function to extrapolate monthly values from quarterly import index
+extrapolate<-function(a,b){
+  sequence<-seq(a,b,length.out=4)
+  sequence[]
+}
+
+# Vector of all the extrapolated monthly import index values
+monthly_import<-c() 
+i=1
+while(i < length(Index.numbers)){
+  extrapolate_quarter<-extrapolate(Index.numbers[i],Index.numbers[i+1])
+  monthly_import<-append(monthly_import,extrapolate_quarter[-4])
+  i<-i+1
+}
+monthly_import<-append(monthly_import,extrapolate_quarter[4])
+
+# Sequence of months from 1/6/2016 to 1/6/2021 
+monthly_dates<-seq(as.Date("2016/6/1"), by = "month", length.out = 61)
+
+# Data frame containing months and corresponding import index values
+new_import_monthly<-cbind.data.frame(as.Date(monthly_dates),monthly_import)
+colnames(new_import_monthly)<-c("Monthly_Date","Index.numbers")
+
+# Adding on Import index column onto d2 data frame 
+d2$"Import Index" <- 0
+i=1
+while(i <= length(d2$"Import Index")){
+  k=1
+  for(j in new_import_monthly$Monthly_Date){
+    if(j==d2$Monthly_Date[i]){
+      d2$`Import Index`[i]<-new_import_monthly$Index.numbers[k]
+    }
+    k<-k+1
+  }
+  i<-i+1
+}
+
+
 
 
