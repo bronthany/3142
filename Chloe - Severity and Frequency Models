@@ -115,7 +115,7 @@ print(drop1(freq_model,test="Chisq"))
 
 
 
-# Data Cleaning for Claims Frequency
+# Data Cleaning for Claims Severity
 data_claim <- data
 data_claim$accident_month <- as.Date(data_claim$accident_month)
 
