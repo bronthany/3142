@@ -1,0 +1,181 @@
+library(class)
+library(MASS)
+library(caret)
+library(devtools)
+library(countreg)
+library(forcats)
+library(insuranceData)
+library(Hmisc)
+library(tidyverse)
+install.packages("countreg", repos="http://R-Forge.R-project.org")
+
+
+install.packages("caret",dep = TRUE)
+install.packages("ggplot2")
+install.packages("tidyverse")
+install.packages("lattice")
+install.packages("lava")
+install.packages("purrr")
+
+library(ggplot2)
+library(lattice)
+library(lava)
+library(purrr)
+library(caret)
+library(dplyr)
+library(tidyverse)
+
+data <- read.csv("ACTL31425110AssignmentData2022.csv", header = TRUE, stringsAsFactors = TRUE) 
+summary(data) 
+
+# EDA
+# DATA CLEANING
+
+# Remove duplicate rows
+data <- data[!duplicated(data),]
+
+# Converting variables accident_month, claim_loss_date, term_start_date, 
+# term_expiry_date into dates
+data$accident_month <- as.Date(data$accident_month) 
+data$claim_loss_date <- as.Date(data$claim_loss_date) 
+data$term_start_date <- as.Date(data$term_start_date) 
+data$term_expiry_date <- as.Date(data$term_expiry_date)
+
+# Converting categorical variables into factors
+names <- c('vehicle_class' ,'accident_month','risk_state_name','year_of_manufacture','policy_id')
+data[,names] <- lapply(data[,names] , factor)
+
+
+# Data Cleaning for Claims Frequency
+data_freq <- data
+data_freq$accident_month <- as.Date(data$accident_month) 
+
+# Convert NAs to 0 
+data_freq$total_claims_cost[is.na(data_freq$total_claims_cost)] <- 0
+
+#Indicator, 1 if claim, 0 if no claim 
+data_freq$Indicator <- ifelse(!data_freq$total_claims_cost == 0, 1, 0) 
+
+# Convert Categorical Data to Factor Variables
+data_freq$vehicle_class <- factor(data_freq$vehicle_class)
+data_freq$risk_state_name <- factor(data_freq$risk_state_name)
+data_freq$year_of_manufacture <- factor(data_freq$year_of_manufacture)
+
+# Data Partition of original Dataset - 70% Training Data, 30% Test Data split
+data_partition <- data_freq
+data_partition <- data_partition$accident_month < as.Date("2020-07-31") 
+data_freq_train <- data_freq[data_partition,] 
+data_freq_test <- data_freq[!data_partition,]
+
+data_freq_train <- data_freq_train %>%
+  group_by(policy_id) %>% 
+  
+  # Calculate total claim number per policy 
+  mutate(Claim_number = sum(Indicator)) %>%
+  
+  # Calculate total exposure per policy ID
+  mutate(total_exposure = sum(exposure)) %>%
+
+  # Remove duplicated policy_id rows
+   distinct(policy_id, .keep_all = TRUE) 
+
+# Convert Claim_number to integer variable
+data_freq_train$Claim_number <- as.integer(data_freq_train$Claim_number)
+
+# Remove 0 exposure entries
+data_freq_train <- data_freq_train[!data_freq_train$exposure == 0,]
+
+# Fit GLM
+freq_model <- glm(Claim_number ~ vehicle_class + year_of_manufacture + risk_state_name, 
+    family=poisson, data = data_freq_train, offset = log(total_exposure))
+
+
+# Model Output Analysis
+print(summary(freq_model))
+
+par(mfrow=c(2,2))
+plot(data_freq_train$Claim_number,fitted(freq_model),xlab="observed amounts",ylab="fitted values",main="Observed vs Predicted",pch=20)
+abline(0,1)
+plot(fitted(freq_model),resid(freq_model,type="deviance"),xlab="fitted values",ylab="deviance residuals",main="Fitted vs Residuals",pch=20)
+abline(0,0)
+qqnorm(resid(freq_model,type="pearson"), xlab="quantiles of Std Normal",ylab="Pearson residuals",pch=20)
+qqline(resid(freq_model))
+
+## test model differences with chi square test
+anova(m2, freq_model, test="Chisq")
+
+#loot at glm summary with correlations
+print(summary(freq_model,corr=T))
+
+#analysis of the deviance table
+print(anova(freq_model, test="Chisq"))
+
+#another diagnostic tool: try to drop each factor separately and see how it goes
+print(drop1(freq_model,test="Chisq"))
+
+
+
+# Data Cleaning for Claims Frequency
+data_claim <- data
+data_claim$accident_month <- as.Date(data_claim$accident_month)
+
+# Severity data set has no NAs and only positive real values
+data_claim <- na.omit(data_claim) 
+data_claim <- data_claim[data_claim$total_claims_cost > 0,]
+
+#Regrouping vehicle_class categories (grouping classes with low number of observations)
+group_by_claim_cost <- aggregate(data_claim[, 13], list(data_claim$vehicle_class), mean)
+group_by_claim_cost$x <- as.numeric(group_by_claim_cost$x)
+include <- group_by_claim_cost[group_by_claim_cost$x > quantile(group_by_claim_cost$x, 0.25), ] 
+keep <- include$Group.1
+data_claim$vehicle_class <- fct_other(data_claim$vehicle_class, keep = keep, other_level = 'Other')
+
+# Remove extreme outliers of total_claims costs
+data_claim <- data_claim[data_claim$total_claims_cost > quantile(data_claim$total_claims_cost, 0.0001), ] 
+data_claim <- data_claim[data_claim$total_claims_cost < quantile(data_claim$total_claims_cost, 0.999), ]
+
+#Indicator, 1 if claim, 0 if no claim 
+data_claim$Indicator <- ifelse(!data_claim$total_claims_cost == 0, 1, 0) 
+
+data_claim <- data_claim %>%
+  group_by(policy_id) %>% 
+  
+  # Calculate total claim number per policy 
+  mutate(Claim_number = sum(Indicator)) %>%
+  
+  # Remove duplicated policy_id rows
+  distinct(policy_id, .keep_all = TRUE) 
+
+data_partition2 <- data_claim
+data_partition2 <- data_partition2$accident_month < as.Date("2020-07-31") 
+data_claim_train <- data_claim[data_partition2,] 
+data_claim_test <- data_claim[!data_partition2,]
+
+
+severity_model <- glm(total_claims_cost ~ year_of_manufacture + vehicle_class + risk_state_name, 
+                      family=Gamma(log), data=data_claim_train, offset = log(Claim_number))
+
+# Model Output Analysis
+
+print(summary(severity_model))
+
+par(mfrow=c(2,2))
+plot(data_claim_train$total_claims_cost,fitted(severity_model),xlab="observed amounts",ylab="fitted values",main="Observed vs Predicted",pch=20)
+abline(0,1)
+plot(fitted(severity_model),resid(severity_model,type="deviance"),xlab="fitted values",ylab="deviance residuals",main="Fitted vs Residuals",pch=20)
+abline(0,0)
+qqnorm(resid(severity_model,type="pearson"), xlab="quantiles of Std Normal",ylab="Pearson residuals",pch=20)
+qqline(resid(severity_model))
+
+m2 <- update(severity_model, . ~ . - vehicle_class)
+## test model differences with chi square test
+anova(m2, severity_model, test="Chisq")
+
+#loot at glm summary with correlations
+print(summary(severity_model,corr=T))
+
+#analysis of the deviance table
+print(anova(severity_model, test="Chisq"))
+
+#another diagnostic tool: try to drop each factor separately and see how it goes
+print(drop1(severity_model,test="Chisq"))
