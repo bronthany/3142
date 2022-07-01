@@ -1,34 +1,92 @@
-# 3142
-
-#### BRIAN - COMMON DATA SET ####
 library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(data.table)
+library(tidyr)
 
 data <- read.csv("ACTL31425110AssignmentData2022.csv", header = TRUE, stringsAsFactors = TRUE)
-summary(data)
+importindex <- read.csv("import.index.csv", header = TRUE)
+CPI <- read.csv("CPI_data.csv", header = TRUE)
+petrol_prices <- read.csv("petrol_price_quarter.csv", header = TRUE)
+
 data$accident_month <- as.Date(data$accident_month)
 data$claim_loss_date <- as.Date(data$claim_loss_date)
 data$term_start_date <- as.Date(data$term_start_date)
 data$term_expiry_date <- as.Date(data$term_expiry_date)
+summary(data)
 
 #### CLEANING ####
-
+data <- data.table(data)
 data <- data[!duplicated(data),] # Duplicates removed
+data$total_claims_cost[is.na(data$total_claims_cost)] <- 0 #Convert NA's to 0
+data[, quarter := year(data$accident_month) + quarter(data$accident_month)*0.1] # Add year.quarter
 
-# Cleaning for Frequency Data set
+### EXTERNAL DATA ####
+# Merge CPI and Import Index
+external <- merge(CPI, importindex, by = "Date")
+cor(external$CPI.Index, external$Index.numbers) # 0.7475
+
+external <- external %>%
+  mutate(quarter = year(Date) + quarter(Date)*0.1) %>%
+  select(-c(X)) %>%
+  rename("import_index" = Index.numbers,
+         "CPI_index" = CPI.Index) # Convert date to year.quarter
+
+# Merge Petrol Prices 
+names(petrol_prices)[2] = "quarter"
+external <- merge(external, petrol_prices[, -1], by = "quarter")
+
+# Frequency vs Severity variables
+freq <- c("petrol_price")
+severity <- c("CPI_index", "import_index")
+
+
+### FREQUENCY ###
+
+# Cleaning
 d1 <- data
-d1$total_claims_cost[is.na(data$total_claims_cost)] <- 0 #Convert NA's to 0
 d1$Indicator <- ifelse(!d1$total_claims_cost == 0, 1, 0) #Indicator, 1 if claim, 0 if no claim
 d1 <- d1 %>% 
   group_by(policy_id, accident_month) %>%
-  mutate(Claim_number = sum(Indicator)) # Calculate total claim number per month per policy
+  mutate(Claim_number = sum(Indicator))# Calculate total claim number per month per policy
 d1 <- d1[!d1$exposure == 0,] # Remove 0 exposure entries
 
-table(d1$Claim_number) #       0       1       2       3 
-                       #   1218043    7226     160      5 
+# Transforming to Quarterly Data
+quarterly.d1 <- d1 %>%
+  group_by(policy_id, quarter) %>%
+  summarise(exposure = sum(exposure), 
+            Claim_number = sum(Claim_number),
+            risk_state_name = last(risk_state_name),
+            vehicle_class = last(vehicle_class),
+            policy_tenure = last(policy_tenure))
 
-# Cleaning for Severity Data set
-d2 <- na.omit(data) # Severity data set has no NA's
-hist(d2$total_claims_cost, breaks = 50)
+hist(quarterly.d1$Claim_number)
+table(quarterly.d1$Claim_number)  #  0      1      2      3      4      5      6 
+                              # 390180   5481    869     49     43      1      3 
+
+# Combining External data -- #
+quarterly.d1 <- merge(quarterly.d1, external[, !colnames(external) %in% severity], by = "quarter")
+
+
+### SEVERITY ###
+
+# Change Severity Data set into quarters, remove no claim entries
+d2 <- data %>% filter(total_claims_cost != 0) # Severity data set only has claims
+quarterly.d2 <- d2 %>%
+  group_by(policy_id, quarter) %>%
+  summarise(Mean_claim_amount = mean(total_claims_cost),
+            risk_state_name = last(risk_state_name),
+            vehicle_class = last(vehicle_class),
+            policy_tenure = last(policy_tenure),
+            sum_insured = last(sum_insured),
+            year_of_manufacture = last(year_of_manufacture))
+
+ggplot(quarterly.d2, aes(x = Mean_claim_amount)) +
+  geom_histogram(fill = "black", colour = "black", binwidth = 2000)
+
+# Combining External data -- #
+quarterly.d2 <- merge(quarterly.d2, external[, !colnames(external) %in% freq], by = "quarter")
+
 
 
 # Training and test data set - Frequency data set
