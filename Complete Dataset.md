@@ -158,8 +158,12 @@ summary(glm.fit12)
 fit1 <- glm(Claim_number ~ vehicle_sales, data = d1.train, family = "poisson", offset = log(exposure))
 summary(fit1)
 
-fit12 <- glm(Claim_number ~ vehicle_risk + lag_petrol_price + vehicle_sales + risk_state_name, data = d1.train, family = "poisson", offset = log(exposure))
-summary(fit12)
+bestfit_so_far <- glm(Claim_number ~ vehicle_risk + lag_petrol_price + vehicle_sales + risk_state_name + policy_tenure, data = d1.train, family = "poisson", offset = log(exposure))
+summary(bestfit_so_far)
+
+  # AIC: 59405
+  # Residual deviance: 48153
+  # Need to test RMSE and group states to clean up predictors
 
 
 ###### SEVERITY MODELLING ######
