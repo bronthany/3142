@@ -20,6 +20,12 @@ data <- data.table(data)
 data <- data[!duplicated(data),] # Duplicates removed
 data$total_claims_cost[is.na(data$total_claims_cost)] <- 0 #Convert NA's to 0
 data[, quarter := year(data$accident_month) + quarter(data$accident_month)*0.1] # Add year.quarter
+data <- data %>% mutate(vehicle_risk = case_when(
+  vehicle_class %in% c("Class 2", "Class 4", "Class 5", "Class 9", "Class 15") ~ "Low Risk Vehicle",
+  vehicle_class %in% c("Class 1", "Class 6", "Class 7", "Class 8", "Class 10") ~ "Medium Risk Vehicle",
+  TRUE ~ "High Risk Vehicle"
+)) # Add Vehicle Risk Class (i.e. combining Vehicle Classes)
+
 
 ### EXTERNAL DATA ####
 # Merge CPI and Import Index
@@ -58,6 +64,7 @@ quarterly.d1 <- d1 %>%
             Claim_number = sum(Claim_number),
             risk_state_name = last(risk_state_name),
             vehicle_class = last(vehicle_class),
+            vehicle_risk = last(vehicle_risk),
             policy_tenure = last(policy_tenure))
 
 hist(quarterly.d1$Claim_number)
@@ -77,15 +84,23 @@ quarterly.d2 <- d2 %>%
   summarise(Mean_claim_amount = mean(total_claims_cost),
             risk_state_name = last(risk_state_name),
             vehicle_class = last(vehicle_class),
+            vehicle_risk = last(vehicle_risk),
             policy_tenure = last(policy_tenure),
             sum_insured = last(sum_insured),
             year_of_manufacture = last(year_of_manufacture))
+quarterly.d2 <- quarterly.d2[quarterly.d2$Mean_claim_amount < quantile(quarterly.d2$Mean_claim_amount,0.99),]
 
 ggplot(quarterly.d2, aes(x = Mean_claim_amount)) +
   geom_histogram(fill = "black", colour = "black", binwidth = 2000)
 
 # Combining External data -- #
 quarterly.d2 <- merge(quarterly.d2, external[, !colnames(external) %in% freq], by = "quarter")
+quarterly.d2 <- quarterly.d2 %>% mutate(state_group = case_when(
+  risk_state_name == "NSW" ~ "NSW",
+  risk_state_name == "VIC" ~ "VIC",
+  risk_state_name == "QLD" ~ "QLD",
+  TRUE ~ "Other"
+)) # Grouping States based off preliminary modelling results
 
 
 
@@ -118,6 +133,29 @@ summary(fit1)
 
 fit12 <- glm(Claim_number ~ risk_state_name + vehicle_class, data = d1.train, family = "poisson", offset = log(exposure))
 summary(fit12)
+
+
+
+#Gamma Regression for Claim Severity
+
+fit1 <- glm(Mean_claim_amount ~ state_group + sum_insured + vehicle_risk + CPI_index + import_index, data = d2.train, family = Gamma(link = "log"))
+summary(fit1)
+fit1pred <- predict(fit1, newdata = d2.test, type = "response") #Prediction
+fit1rmse <- rmse(actual = d2.test$Mean_claim_amount, predicted = fit1pred) #RMSE: 9034.15 (after removing outliers)
+#effect_plot(fit1, pred = import_index, interval = T) #Check effect of predictors
+
+#cor(model.matrix(fit1)[,-1]) #Check Correlation of predictors
+
+fit2 <- glm(Mean_claim_amount ~ state_group + sum_insured + vehicle_risk, data = d2.train, family = Gamma(link = "log"))
+summary(fit2)
+fit2pred <- predict(fit2, newdata = d2.test, type = "response") #Prediction
+fit2rmse <- rmse(actual = d2.test$Mean_claim_amount, predicted = fit2pred) #RMSE: 8887.90
+
+
+
+#####################################################################
+#####################################################################
+#####################################################################
 
 
 
