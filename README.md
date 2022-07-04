@@ -152,6 +152,19 @@ fit2pred <- predict(fit2, newdata = d2.test, type = "response") #Prediction
 fit2rmse <- rmse(actual = d2.test$Mean_claim_amount, predicted = fit2pred) #RMSE: 8887.90
 
 
+#Inverse Gaussian Regression for Claim Severity
+
+fit3 <- glm(Mean_claim_amount ~ state_group + sum_insured + vehicle_risk + CPI_index, data = d2.train, family = inverse.gaussian(link = "log"))
+summary(fit3)
+fit3pred <- predict(fit3, newdata = d2.test, type = "response") #Prediction
+fit3rmse <- rmse(actual = d2.test$Mean_claim_amount, predicted = fit3pred) #RMSE: 24163.83
+
+fit4 <- glm(Mean_claim_amount ~ state_group + sum_insured + vehicle_risk, data = d2.train, family = inverse.gaussian(link = "log"))
+summary(fit4)
+fit4pred <- predict(fit4, newdata = d2.test, type = "response") #Prediction
+fit4rmse <- rmse(actual = d2.test$Mean_claim_amount, predicted = fit4pred) #RMSE: 22566.37
+
+
 
 #####################################################################
 #####################################################################
