@@ -154,7 +154,7 @@ glm.fit12 <- glm(Indicator ~ exposure + risk_state_name, data = d1.train, family
 summary(glm.fit12)
 
 
-# Poisson Regression for Claim Frequency - Main Focus
+# Poisson Regression for Claim Frequency - Main Model that we need to test
 fit1 <- glm(Claim_number ~ vehicle_sales, data = d1.train, family = "poisson", offset = log(exposure))
 summary(fit1)
 
