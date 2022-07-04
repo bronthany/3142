@@ -138,6 +138,8 @@ training_d2 <- quarterly.d2$Date < as.Date("2020-07-31")
 d2.train <- quarterly.d2[training_d2,]
 d2.test <- quarterly.d2[!training_d2,]
 
+
+##### FREQUENCY MODELLING #####
 # Logistic Regression for Claim Frequency
 glm.fit1 <- glm(Indicator ~ exposure, data = d1.train, family = "binomial")
 summary(glm.fit1)
@@ -152,8 +154,7 @@ glm.fit12 <- glm(Indicator ~ exposure + risk_state_name, data = d1.train, family
 summary(glm.fit12)
 
 
-
-# Poisson Regression for Claim Frequency
+# Poisson Regression for Claim Frequency - Main Focus
 fit1 <- glm(Claim_number ~ vehicle_sales, data = d1.train, family = "poisson", offset = log(exposure))
 summary(fit1)
 
@@ -161,6 +162,7 @@ fit12 <- glm(Claim_number ~ vehicle_risk + lag_petrol_price + vehicle_sales + ri
 summary(fit12)
 
 
+###### SEVERITY MODELLING ######
 
 #Gamma Regression for Claim Severity
 
