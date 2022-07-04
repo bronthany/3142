@@ -3,17 +3,20 @@ library(ggplot2)
 library(lubridate)
 library(data.table)
 library(tidyr)
+library(stringr)
 
 data <- read.csv("ACTL31425110AssignmentData2022.csv", header = TRUE, stringsAsFactors = TRUE)
 importindex <- read.csv("import.index.csv", header = TRUE)
 CPI <- read.csv("CPI_data.csv", header = TRUE)
 petrol_prices <- read.csv("petrol_price_quarter.csv", header = TRUE)
+motor_sales <- read.csv("motor_vehicle_sales.csv", header = TRUE)
 
 data$accident_month <- as.Date(data$accident_month)
 data$claim_loss_date <- as.Date(data$claim_loss_date)
 data$term_start_date <- as.Date(data$term_start_date)
 data$term_expiry_date <- as.Date(data$term_expiry_date)
 summary(data)
+
 
 #### CLEANING ####
 data <- data.table(data)
@@ -25,7 +28,7 @@ data <- data %>% mutate(vehicle_risk = case_when(
   vehicle_class %in% c("Class 1", "Class 6", "Class 7", "Class 8", "Class 10") ~ "Medium Risk Vehicle",
   TRUE ~ "High Risk Vehicle"
 )) # Add Vehicle Risk Class (i.e. combining Vehicle Classes)
-
+data$vehicle_risk <- as.factor(data$vehicle_risk)
 
 ### EXTERNAL DATA ####
 # Merge CPI and Import Index
@@ -36,36 +39,59 @@ external <- external %>%
   mutate(quarter = year(Date) + quarter(Date)*0.1) %>%
   select(-c(X)) %>%
   rename("import_index" = Index.numbers,
-         "CPI_index" = CPI.Index) # Convert date to year.quarter
+         "CPI_index" = CPI.Index) %>%   # Convert date to year.quarter
+  mutate("lag_CPI_index" = lag(CPI_index)) # Add lagged CPI by 1 quarter
+ 
 
 # Merge Petrol Prices 
 names(petrol_prices)[2] = "quarter"
+petrol_prices <- petrol_prices %>%
+  mutate("lag_petrol_price" = lag(petrol_price)) # Add lagged petrol price by 1 quarter
+
 external <- merge(external, petrol_prices[, -1], by = "quarter")
 
+# Merge Motor Vehicle Salesr
+motor_sales[c("Month", "Year")] <- str_split_fixed(motor_sales$Date, "-", 2)
+motor_sales[c("quarter")] <- ifelse(motor_sales$Month == "Jan" | motor_sales$Month == "Feb" | motor_sales$Month == "Mar", 1,
+                                    ifelse(motor_sales$Month == "Apr" | motor_sales$Month == "May" | motor_sales$Month == "Jun", 2,
+                                           ifelse(motor_sales$Month == "Jul" | motor_sales$Month == "Aug" | motor_sales$Month == "Sep", 3,
+                                                  ifelse(motor_sales$Month == "Oct" | motor_sales$Month == "Nov" | motor_sales$Month == "Dec", 4, NA)))
+                                    )
+motor_sales[c("quarter")] <- motor_sales$quarter * 0.1 + as.numeric(motor_sales$Year)
+  # Data is monthly. Sum motor vehicle sales by quarter to get quarterly value
+motor_sales <- motor_sales %>% 
+  group_by(quarter) %>%
+  summarise(Units = sum(Units)) %>%
+  rename("vehicle_sales" = Units) %>%
+  mutate("lag_vehicle_sales" = lag(vehicle_sales))
+  # Merge into external data set
+external <- merge(external, motor_sales, by = "quarter")
+
 # Frequency vs Severity variables
-freq <- c("petrol_price")
-severity <- c("CPI_index", "import_index")
+freq <- c("petrol_price", "lag_petrol_price", "vehicle_sales", "lag_vehicle_sales")
+severity <- c("CPI_index", "import_index", "lag_CPI_index")
 
 
 ### FREQUENCY ###
 
 # Cleaning
 d1 <- data
-d1$Indicator <- ifelse(!d1$total_claims_cost == 0, 1, 0) #Indicator, 1 if claim, 0 if no claim
+d1$Indicator <- ifelse(!d1$total_claims_cost == 0, 1, 0) # Indicator, 1 if claim, 0 if no claim
 d1 <- d1 %>% 
   group_by(policy_id, accident_month) %>%
-  mutate(Claim_number = sum(Indicator))# Calculate total claim number per month per policy
+  mutate(Claim_number = sum(Indicator)) # Calculate total claim number per month per policy
 d1 <- d1[!d1$exposure == 0,] # Remove 0 exposure entries
 
-# Transforming to Quarterly Data
+# Transforming frequency dataset to quarterly data
 quarterly.d1 <- d1 %>%
   group_by(policy_id, quarter) %>%
   summarise(exposure = sum(exposure), 
             Claim_number = sum(Claim_number),
+            Indicator = last(Indicator),
             risk_state_name = last(risk_state_name),
             vehicle_class = last(vehicle_class),
-            vehicle_risk = last(vehicle_risk),
-            policy_tenure = last(policy_tenure))
+            policy_tenure = last(policy_tenure),
+            vehicle_risk = last(vehicle_risk))
 
 hist(quarterly.d1$Claim_number)
 table(quarterly.d1$Claim_number)  #  0      1      2      3      4      5      6 
@@ -84,11 +110,10 @@ quarterly.d2 <- d2 %>%
   summarise(Mean_claim_amount = mean(total_claims_cost),
             risk_state_name = last(risk_state_name),
             vehicle_class = last(vehicle_class),
-            vehicle_risk = last(vehicle_risk),
             policy_tenure = last(policy_tenure),
             sum_insured = last(sum_insured),
-            year_of_manufacture = last(year_of_manufacture))
-quarterly.d2 <- quarterly.d2[quarterly.d2$Mean_claim_amount < quantile(quarterly.d2$Mean_claim_amount,0.99),]
+            year_of_manufacture = last(year_of_manufacture),
+            vehicle_risk = last(vehicle_risk))
 
 ggplot(quarterly.d2, aes(x = Mean_claim_amount)) +
   geom_histogram(fill = "black", colour = "black", binwidth = 2000)
@@ -103,17 +128,15 @@ quarterly.d2 <- quarterly.d2 %>% mutate(state_group = case_when(
 )) # Grouping States based off preliminary modelling results
 
 
-
 # Training and test data set - Frequency data set
-training_d1 <- d1$accident_month < as.Date("2020-07-31")
-d1.train <- d1[training_d1,]
-d1.test <- d1[!training_d1,]
+training_d1 <- quarterly.d1$Date < as.Date("2020-07-31")
+d1.train <- quarterly.d1[training_d1,]
+d1.test <- quarterly.d1[!training_d1,]
 
 # Training Data set - Severity data set
-training_d2 <- d2$accident_month < as.Date("2020-07-31")
-d2.train <- d2[training_d2,]
-d2.test <- d2[!training_d2,]
-
+training_d2 <- quarterly.d2$Date < as.Date("2020-07-31")
+d2.train <- quarterly.d2[training_d2,]
+d2.test <- quarterly.d2[!training_d2,]
 
 # Logistic Regression for Claim Frequency
 glm.fit1 <- glm(Indicator ~ exposure, data = d1.train, family = "binomial")
@@ -122,16 +145,19 @@ summary(glm.fit1)
 glm.fit2 <- glm(Indicator ~ risk_state_name, data = d1.train, family = "binomial", offset = exposure)
 summary(glm.fit2)
 
+glm.fit3 <- glm(Indicator ~ vehicle_class, data = d1.train, family = "binomial", offset = exposure)
+summary(glm.fit3)
+
 glm.fit12 <- glm(Indicator ~ exposure + risk_state_name, data = d1.train, family = "binomial")
 summary(glm.fit12)
 
 
 
 # Poisson Regression for Claim Frequency
-fit1 <- glm(Claim_number ~ risk_state_name, data = d1.train, family = "poisson", offset = log(exposure))
+fit1 <- glm(Claim_number ~ vehicle_sales, data = d1.train, family = "poisson", offset = log(exposure))
 summary(fit1)
 
-fit12 <- glm(Claim_number ~ risk_state_name + vehicle_class, data = d1.train, family = "poisson", offset = log(exposure))
+fit12 <- glm(Claim_number ~ vehicle_risk + lag_petrol_price + vehicle_sales + risk_state_name, data = d1.train, family = "poisson", offset = log(exposure))
 summary(fit12)
 
 
