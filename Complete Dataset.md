@@ -4,12 +4,16 @@ library(lubridate)
 library(data.table)
 library(tidyr)
 library(stringr)
+library(Metrics)
 
 data <- read.csv("ACTL31425110AssignmentData2022.csv", header = TRUE, stringsAsFactors = TRUE)
 importindex <- read.csv("import.index.csv", header = TRUE)
 CPI <- read.csv("CPI_data.csv", header = TRUE)
 petrol_prices <- read.csv("petrol_price_quarter.csv", header = TRUE)
 motor_sales <- read.csv("motor_vehicle_sales.csv", header = TRUE)
+gold <- read.csv("GoldData.csv", header = TRUE)
+road_deaths <- read.csv("Road_Deaths.csv", header = TRUE)
+unemployment <- read.csv("unemploymentrate.csv", header = TRUE)
 
 data$accident_month <- as.Date(data$accident_month)
 data$claim_loss_date <- as.Date(data$claim_loss_date)
@@ -30,7 +34,9 @@ data <- data %>% mutate(vehicle_risk = case_when(
 )) # Add Vehicle Risk Class (i.e. combining Vehicle Classes)
 data$vehicle_risk <- as.factor(data$vehicle_risk)
 
+
 ### EXTERNAL DATA ####
+
 # Merge CPI and Import Index
 external <- merge(CPI, importindex, by = "Date")
 cor(external$CPI.Index, external$Index.numbers) # 0.7475
@@ -50,7 +56,7 @@ petrol_prices <- petrol_prices %>%
 
 external <- merge(external, petrol_prices[, -1], by = "quarter")
 
-# Merge Motor Vehicle Salesr
+# Merge Motor Vehicle Sales
 motor_sales[c("Month", "Year")] <- str_split_fixed(motor_sales$Date, "-", 2)
 motor_sales[c("quarter")] <- ifelse(motor_sales$Month == "Jan" | motor_sales$Month == "Feb" | motor_sales$Month == "Mar", 1,
                                     ifelse(motor_sales$Month == "Apr" | motor_sales$Month == "May" | motor_sales$Month == "Jun", 2,
@@ -67,12 +73,30 @@ motor_sales <- motor_sales %>%
   # Merge into external data set
 external <- merge(external, motor_sales, by = "quarter")
 
+# Merge Gold data
+gold[c("Day", "Month", "Year")] <- str_split_fixed(gold$Quarter, "/", 3)  # Split date into time periods
+gold[c("quarter")] <- as.numeric(gold$Year) + 0.1*(as.numeric(gold$Month)/3) + 2000 # Transform dates to year.quarter
+colnames(gold)[2] <- "gold" 
+external <- merge(external, gold[c("quarter", "gold")], by = "quarter")
+
+# Merge Road Deaths data
+road_deaths[c("Day", "Month", "Year")] <- str_split_fixed(road_deaths$Quarter, "/", 3)  # Split date into time periods
+road_deaths[c("quarter")] <- as.numeric(road_deaths$Year) + 0.1*(as.numeric(road_deaths$Month)/3) # Transform dates to year.quarter
+colnames(road_deaths)[2] <- "road_deaths"
+external <- merge(external, road_deaths[c("quarter", "road_deaths")], by = "quarter")
+
+# Merge Unemployment data
+unemployment[c("Day", "Month", "Year")] <- str_split_fixed(unemployment$Quarter, "/", 3)  # Split date into time periods
+unemployment[c("quarter")] <- as.numeric(unemployment$Year) + 0.1*(as.numeric(unemployment$Month)/3) # Transform dates to year.quarter
+colnames(unemployment)[2] <- "unemployment"
+external <- merge(external, unemployment[c("quarter", "unemployment")], by = "quarter")
+
 # Frequency vs Severity variables
 freq <- c("petrol_price", "lag_petrol_price", "vehicle_sales", "lag_vehicle_sales")
 severity <- c("CPI_index", "import_index", "lag_CPI_index")
 
 
-### FREQUENCY ###
+#### FREQUENCY DATA TRANSFORMATION ####
 
 # Cleaning
 d1 <- data
@@ -96,12 +120,18 @@ quarterly.d1 <- d1 %>%
 hist(quarterly.d1$Claim_number)
 table(quarterly.d1$Claim_number)  #  0      1      2      3      4      5      6 
                               # 390180   5481    869     49     43      1      3 
+visual.d1 <- quarterly.d1 %>%
+  group_by(Date) %>%
+  summarise(Claim_number = sum(Claim_number),
+            Policy_number = n())
+ggplot(visual.d1, aes(Date, Claim_number, group = 1))+
+  geom_line() 
 
 # Combining External data -- #
 quarterly.d1 <- merge(quarterly.d1, external[, !colnames(external) %in% severity], by = "quarter")
 
 
-### SEVERITY ###
+#### SEVERITY DATA TRANSFORMATION ####
 
 # Change Severity Data set into quarters, remove no claim entries
 d2 <- data %>% filter(total_claims_cost != 0) # Severity data set only has claims
@@ -127,6 +157,7 @@ quarterly.d2 <- quarterly.d2 %>% mutate(state_group = case_when(
   TRUE ~ "Other"
 )) # Grouping States based off preliminary modelling results
 
+# Splitting Training and Test Sets
 
 # Training and test data set - Frequency data set
 training_d1 <- quarterly.d1$Date < as.Date("2020-07-31")
@@ -140,6 +171,7 @@ d2.test <- quarterly.d2[!training_d2,]
 
 
 ##### FREQUENCY MODELLING #####
+
 # Logistic Regression for Claim Frequency
 glm.fit1 <- glm(Indicator ~ exposure, data = d1.train, family = "binomial")
 summary(glm.fit1)
@@ -154,16 +186,42 @@ glm.fit12 <- glm(Indicator ~ exposure + risk_state_name, data = d1.train, family
 summary(glm.fit12)
 
 
-# Poisson Regression for Claim Frequency - Main Model that we need to test
-fit1 <- glm(Claim_number ~ vehicle_sales, data = d1.train, family = "poisson", offset = log(exposure))
-summary(fit1)
+# Poisson Regression for Claim Frequency
 
 bestfit_so_far <- glm(Claim_number ~ vehicle_risk + lag_petrol_price + vehicle_sales + risk_state_name + policy_tenure, data = d1.train, family = "poisson", offset = log(exposure))
 summary(bestfit_so_far)
+# AIC: 59405
+# Residual deviance: 48153
 
-  # AIC: 59405
-  # Residual deviance: 48153
-  # Need to test RMSE and group states to clean up predictors
+bestfit_pred <- predict(bestfit_so_far, newdata = d1.test, type = "response") # Prediction
+bestfit_train <- predict(bestfit_so_far, newdata = d1.train, type = "response")
+d1.pred <- cbind(d1.test, bestfit_pred) 
+
+rmse(actual = d1.pred$Claim_number, predicted = bestfit_pred) # 0.149, i.e on average model is predicting +- 0.149 claims more than actual
+rmse(actual = d1.train$Claim_number, predicted = bestfit_train)
+
+  # Visualisation
+d1.trainpred <- d1.train %>%
+  mutate(pred = bestfit_train) %>%
+  group_by(quarter) %>%
+  summarise(real_claims = sum(Claim_number),
+            pred_claims = sum(pred),
+            Date = last(Date))
+ggplot(d1.trainpred, aes(Date, real_claims, group = 1)) +
+  geom_line() +
+  geom_line(aes(y = pred_claims, group = 1), color = "blue")
+
+d1.pred <- d1.pred %>%
+  group_by(quarter) %>%
+  summarise(real_claims = sum(Claim_number),
+            pred_claims = sum(bestfit_pred),
+            Date = last(Date))
+
+  # Visualisation of prediction of training + testing
+visual <- rbind(d1.trainpred, d1.pred)
+ggplot(visual, aes(Date, real_claims, group = 1)) +
+  geom_line() +
+  geom_line(aes(y = pred_claims, group = 1), color = "blue")
 
 
 ###### SEVERITY MODELLING ######
