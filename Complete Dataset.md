@@ -362,6 +362,21 @@ while(i <= length(d2$"Import Index")){
   i<-i+1
 }
 
+# Chloe - LOOCV for Poisson
+
+install.packages("caret")
+library(caret)
+
+#specify the cross-validation method
+ctrl <- trainControl(method = "LOOCV")
+
+#fit a regression model and use LOOCV to evaluate performance
+model <- train(Claim_number ~ vehicle_risk + 
+                 risk_state_name + policy_tenure, data = quarterly.d1, method = "glm", 
+               trControl = ctrl, family = "poisson")
+
+#view summary of LOOCV               
+print(model)
 
 
 
