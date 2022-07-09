@@ -157,39 +157,53 @@ quarterly.d2 <- quarterly.d2 %>% mutate(state_group = case_when(
   TRUE ~ "Other"
 )) # Grouping States based off preliminary modelling results
 
-# Splitting Training and Test Sets
 
-# Training and test data set - Frequency data set
-training_d1 <- quarterly.d1$Date < as.Date("2020-07-31")
-d1.train <- quarterly.d1[training_d1,]
-d1.test <- quarterly.d1[!training_d1,]
 
-# Training Data set - Severity data set
-training_d2 <- quarterly.d2$Date < as.Date("2020-07-31")
-d2.train <- quarterly.d2[training_d2,]
-d2.test <- quarterly.d2[!training_d2,]
+### K-FOLD CV for Time Series Data ###
+
+# Function that calculates RMSE of final prediction
+rootmse <- function(model, testset, trainingset){
+  
+  test <- predict(model, newdata = testset, type = "response")  # Prediction for Test set
+  train <- predict(model, newdata = trainingset, type = "response")  # Prediction for Training set
+  
+  testset <- data.table(testset)
+  testset <- testset[, pred := test   # Summarise predictions and actual claims by quarter for validation set
+  ][, .(real_claims = sum(Claim_number), pred_claims = sum(pred), Date = last(Date)), by = .(quarter)]
+  
+  trainingset <- data.table(trainingset)
+  trainingset <- trainingset[, pred := train   # Summarise predictions and actual claims by quarter for training set
+  ][, .(real_claims = sum(Claim_number), pred_claims = sum(pred), Date = last(Date)), by = .(quarter)]
+  
+  rmse <- data.table("Training RMSE" = sqrt(mean((trainingset$real_claims - trainingset$pred_claims)^2)),
+                     "Test RMSE" = sqrt(mean(testset$real_claims - testset$pred_claims)^2))
+  return(rmse)
+}
+  # Using K = 5, split data set into 5 folds.
+Date <- unique(quarterly.d1$Date) # 19 quarters. 
+split <- rep(1:5, each = 4, length.out = 19) # Using K = 5, split into 5 groups with the last group consisting of 3 quarters only.
+split <- cbind(Date, split)
+
+kfold_freq <- merge(quarterly.d1, split, by = "Date")
+kfold_sev <- merge(quarterly.d2, split, by = "Date")
 
 
 ##### FREQUENCY MODELLING #####
 
-# Logistic Regression for Claim Frequency
-glm.fit1 <- glm(Indicator ~ exposure, data = d1.train, family = "binomial")
-summary(glm.fit1)
-
-glm.fit2 <- glm(Indicator ~ risk_state_name, data = d1.train, family = "binomial", offset = exposure)
-summary(glm.fit2)
-
-glm.fit3 <- glm(Indicator ~ vehicle_class, data = d1.train, family = "binomial", offset = exposure)
-summary(glm.fit3)
-
-glm.fit12 <- glm(Indicator ~ exposure + risk_state_name, data = d1.train, family = "binomial")
-summary(glm.fit12)
-
-
 # Poisson Regression for Claim Frequency
 
-bestfit_so_far <- glm(Claim_number ~ vehicle_risk + lag_petrol_price + vehicle_sales + risk_state_name + policy_tenure, data = d1.train, family = "poisson", offset = log(exposure))
-summary(bestfit_so_far)
+  # Perform k-fold CV on a rolling basis
+poissonCV <- data.table("Training RMSE" = numeric(), "Test RMSE" = numeric()) # Create empty table to store results
+for(i in 1:4){
+  training <- kfold_freq[which(kfold_freq$split <= i), ] 
+  test <- kfold_freq[which(kfold_freq$split == i+1), ]
+  
+  model <- glm(Claim_number ~ vehicle_risk + lag_petrol_price + state_group + policy_tenure + vehicle_sales, data = training, family = "poisson", offset = log(exposure))
+  print(summary(model))
+  
+  poissonCV <- rbind(poissonCV, rootmse(model, test, training))
+}
+
 # AIC: 59405
 # Residual deviance: 48153
 
