@@ -179,6 +179,7 @@ rootmse <- function(model, testset, trainingset){
                      "Test RMSE" = sqrt(mean(testset$real_claims - testset$pred_claims)^2))
   return(rmse)
 }
+
   # Using K = 5, split data set into 5 folds.
 Date <- unique(quarterly.d1$Date) # 19 quarters. 
 split <- rep(1:5, each = 4, length.out = 19) # Using K = 5, split into 5 groups with the last group consisting of 3 quarters only.
@@ -203,10 +204,12 @@ for(i in 1:4){
   
   poissonCV <- rbind(poissonCV, rootmse(model, test, training))
 }
+poissonCV
 
 # AIC: 59405
 # Residual deviance: 48153
-
+bestfit_so_far <- glm(Claim_number ~ vehicle_risk + lag_petrol_price + state_group + policy_tenure + vehicle_sales, 
+                      data = training, family = "poisson", offset = log(exposure)) # Final model
 bestfit_pred <- predict(bestfit_so_far, newdata = d1.test, type = "response") # Prediction
 bestfit_train <- predict(bestfit_so_far, newdata = d1.train, type = "response")
 d1.pred <- cbind(d1.test, bestfit_pred) 
