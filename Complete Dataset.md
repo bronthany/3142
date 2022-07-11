@@ -5,6 +5,9 @@ library(data.table)
 library(tidyr)
 library(stringr)
 library(Metrics)
+library(AER)
+library(pscl)
+library(MASS)
 
 data <- read.csv("ACTL31425110AssignmentData2022.csv", header = TRUE, stringsAsFactors = TRUE)
 importindex <- read.csv("import.index.csv", header = TRUE)
@@ -14,6 +17,7 @@ motor_sales <- read.csv("motor_vehicle_sales.csv", header = TRUE)
 gold <- read.csv("GoldData.csv", header = TRUE)
 road_deaths <- read.csv("Road_Deaths.csv", header = TRUE)
 unemployment <- read.csv("unemploymentrate.csv", header = TRUE)
+maintenance <- read.csv("data_petrol.csv", header = TRUE)
 
 data$accident_month <- as.Date(data$accident_month)
 data$claim_loss_date <- as.Date(data$claim_loss_date)
@@ -38,12 +42,13 @@ data$vehicle_risk <- as.factor(data$vehicle_risk)
 ### EXTERNAL DATA ####
 
 # Merge CPI and Import Index
+CPI <- rbind(CPI, data.frame(X = 21, Date = "2021-06-01", CPI.Index = 118.8))
 external <- merge(CPI, importindex, by = "Date")
 cor(external$CPI.Index, external$Index.numbers) # 0.7475
 
 external <- external %>%
   mutate(quarter = year(Date) + quarter(Date)*0.1) %>%
-  select(-c(X)) %>%
+  dplyr :: select(-c(X)) %>%
   rename("import_index" = Index.numbers,
          "CPI_index" = CPI.Index) %>%   # Convert date to year.quarter
   mutate("lag_CPI_index" = lag(CPI_index)) # Add lagged CPI by 1 quarter
@@ -77,7 +82,8 @@ external <- merge(external, motor_sales, by = "quarter")
 gold[c("Day", "Month", "Year")] <- str_split_fixed(gold$Quarter, "/", 3)  # Split date into time periods
 gold[c("quarter")] <- as.numeric(gold$Year) + 0.1*(as.numeric(gold$Month)/3) + 2000 # Transform dates to year.quarter
 colnames(gold)[2] <- "gold" 
-external <- merge(external, gold[c("quarter", "gold")], by = "quarter")
+gold[c("lag_gold")] <- lag(gold$gold) # Lag Gold
+external <- merge(external, gold[c("quarter", "gold", "lag_gold")], by = "quarter")
 
 # Merge Road Deaths data
 road_deaths[c("Day", "Month", "Year")] <- str_split_fixed(road_deaths$Quarter, "/", 3)  # Split date into time periods
@@ -89,7 +95,16 @@ external <- merge(external, road_deaths[c("quarter", "road_deaths")], by = "quar
 unemployment[c("Day", "Month", "Year")] <- str_split_fixed(unemployment$Quarter, "/", 3)  # Split date into time periods
 unemployment[c("quarter")] <- as.numeric(unemployment$Year) + 0.1*(as.numeric(unemployment$Month)/3) # Transform dates to year.quarter
 colnames(unemployment)[2] <- "unemployment"
-external <- merge(external, unemployment[c("quarter", "unemployment")], by = "quarter")
+unemployment[c("lag_unemployment")] <- lag(unemployment$unemployment) # Lag unemployment
+external <- merge(external, unemployment[c("quarter", "unemployment", "lag_unemployment")], by = "quarter")
+
+# Merge Maintenance and Repair Index
+maintenance[c("Day", "Month", "Year")] <- str_split_fixed(maintenance$Date, "/", 3)  # Split date into time periods
+maintenance[c("quarter")] <- as.numeric(maintenance$Year) + 2000 + 0.1*(as.numeric(maintenance$Month)/3) # Transform dates to year.quarter
+colnames(maintenance)[8] <- "maintenance_index"
+external <- merge(external, maintenance[c("quarter", "maintenance_index")], by = "quarter")
+
+
 
 # Frequency vs Severity variables
 freq <- c("petrol_price", "lag_petrol_price", "vehicle_sales", "lag_vehicle_sales")
