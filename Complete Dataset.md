@@ -215,8 +215,8 @@ rootmse <- function(model, testset, trainingset){
 }
 
   # Using K = 5, split data set into 5 folds.
-Date <- unique(quarterly.d1$Date) # 19 quarters. 
-split <- rep(1:5, each = 4, length.out = 19) # Using K = 5, split into 5 groups with the last group consisting of 3 quarters only.
+Date <- unique(quarterly.d1$Date) # 20 quarters. 
+split <- rep(1:5, each = 4, length.out = 20) # Using K = 5, split into 5 groups with the last group consisting of 3 quarters only.
 split <- cbind(Date, split)
 
 kfold_freq <- merge(quarterly.d1, split, by = "Date")
@@ -277,34 +277,101 @@ ggplot(visual, aes(Date, real_claims, group = 1)) +
 
 ###### SEVERITY MODELLING ######
 
-#Gamma Regression for Claim Severity
+###########
+#Gamma GLM
+###########
 
-fit1 <- glm(Mean_claim_amount ~ state_group + sum_insured + vehicle_risk + CPI_index + import_index, data = d2.train, family = Gamma(link = "log"))
-summary(fit1)
-fit1pred <- predict(fit1, newdata = d2.test, type = "response") #Prediction
-fit1rmse <- rmse(actual = d2.test$Mean_claim_amount, predicted = fit1pred) #RMSE: 9034.15 (after removing outliers)
-#effect_plot(fit1, pred = import_index, interval = T) #Check effect of predictors
+fit101 <- glm(Mean_claim_amount ~ state_group+sum_insured+vehicle_risk+CPI_index, data = d2.train, family = Gamma(link = "log"))
+summary(fit101)
+#Residual Deviance: 6735.7
+#AIC: 102365
+#Good predictors: state_group, sum_insured, vehicle_risk, CPI_index
+#Bad predictors: import_index, lag_CPI_index, gold, road_deaths, unemployment
 
-#cor(model.matrix(fit1)[,-1]) #Check Correlation of predictors
+fit101pred <- predict(fit101, newdata = d2.test, type = "response") #Prediction
+fit101rmse <- rmse(actual = d2.test$Mean_claim_amount, predicted = fit101pred) #RMSE: 9210.70 (after removing outliers)
+d2.pred101 <- cbind(d2.test, fit101pred)
 
-fit2 <- glm(Mean_claim_amount ~ state_group + sum_insured + vehicle_risk, data = d2.train, family = Gamma(link = "log"))
-summary(fit2)
-fit2pred <- predict(fit2, newdata = d2.test, type = "response") #Prediction
-fit2rmse <- rmse(actual = d2.test$Mean_claim_amount, predicted = fit2pred) #RMSE: 8887.90
+fit101trainpred <- predict(fit101, newdata = d2.train, type = "response")
+fit101trainrmse <- rmse(actual = d2.train$Mean_claim_amount, predicted = fit101trainpred) #RMSE: 8175.72 (after removing outliers)
+
+d2.trainpred101 <- d2.train %>%
+  mutate(pred = fit101trainpred) %>%
+  group_by(quarter) %>%
+  summarise(real_size = mean(Mean_claim_amount), pred_size = mean(pred), Date = last(Date))
+
+d2.pred101 <- d2.pred101 %>%
+  group_by(quarter) %>%
+  summarise(real_size = mean(Mean_claim_amount), pred_size = mean(fit101pred), Date = last(Date))
+
+visual <- rbind(d2.trainpred101, d2.pred101)
+ggplot(visual, aes(Date, real_size, group = 1)) +
+  geom_line() +
+  geom_line(aes(y = pred_size, group = 1), color = "blue")
 
 
-#Inverse Gaussian Regression for Claim Severity
+########
+#Log-linked Gaussian GLM
+########
 
-fit3 <- glm(Mean_claim_amount ~ state_group + sum_insured + vehicle_risk + CPI_index, data = d2.train, family = inverse.gaussian(link = "log"))
-summary(fit3)
-fit3pred <- predict(fit3, newdata = d2.test, type = "response") #Prediction
-fit3rmse <- rmse(actual = d2.test$Mean_claim_amount, predicted = fit3pred) #RMSE: 24163.83
+fit202 <- glm(Mean_claim_amount ~ state_group + sum_insured + vehicle_risk + CPI_index, data = d2.train, family = gaussian(link = "log"))
+summary(fit202)
+fit202pred <- predict(fit202, newdata = d2.test, type = "response") #Prediction
+fit202rmse <- rmse(actual = d2.test$Mean_claim_amount, predicted = fit202pred) #RMSE: 8230.45
 
-fit4 <- glm(Mean_claim_amount ~ state_group + sum_insured + vehicle_risk, data = d2.train, family = inverse.gaussian(link = "log"))
-summary(fit4)
-fit4pred <- predict(fit4, newdata = d2.test, type = "response") #Prediction
-fit4rmse <- rmse(actual = d2.test$Mean_claim_amount, predicted = fit4pred) #RMSE: 22566.37
 
+d2.pred202 <- cbind(d2.test, fit202pred)
+
+fit202trainpred <- predict(fit202, newdata = d2.train, type = "response")
+fit202trainrmse <- rmse(actual = d2.train$Mean_claim_amount, predicted = fit202trainpred) #RMSE: 7511.32 (after removing outliers)
+
+
+d2.trainpred202 <- d2.train %>%
+  mutate(pred = fit202trainpred) %>%
+  group_by(quarter) %>%
+  summarise(real_size = mean(Mean_claim_amount), pred_size = mean(pred), Date = last(Date))
+
+d2.pred202 <- d2.pred202 %>%
+  group_by(quarter) %>%
+  summarise(real_size = mean(Mean_claim_amount), pred_size = mean(fit202pred), Date = last(Date))
+
+visual <- rbind(d2.trainpred202, d2.pred202)
+ggplot(visual, aes(Date, real_size, group = 1)) +
+  geom_line() +
+  geom_line(aes(y = pred_size, group = 1), color = "blue")
+
+# Function that calculates RMSE of final prediction (for Severity)
+rootmse_sev <- function(model, testset, trainingset){
+  
+  test <- predict(model, newdata = testset, type = "response")  # Prediction for Test set
+  train <- predict(model, newdata = trainingset, type = "response")  # Prediction for Training set
+  
+  testset <- data.table(testset)
+  testset <- testset[, pred := test   # Summarise predictions and actual claims by quarter for validation set
+  ][, .(real_size = mean(Mean_claim_amount), pred_size = mean(pred), Date = last(Date)), by = .(quarter)]
+  
+  trainingset <- data.table(trainingset)
+  trainingset <- trainingset[, pred := train   # Summarise predictions and actual claims by quarter for training set
+  ][, .(real_size = mean(Mean_claim_amount), pred_size = mean(pred), Date = last(Date)), by = .(quarter)]
+  
+  rmse <- data.table("Training RMSE" = sqrt(mean((trainingset$real_size - trainingset$pred_size)^2)),
+                     "Test RMSE" = sqrt(mean(testset$real_size - testset$pred_size)^2))
+  return(rmse)
+}
+
+
+# Perform k-fold CV on a rolling basis (for Severity)
+gammaCV <- data.table("Training RMSE" = numeric(), "Test RMSE" = numeric()) # Create empty table to store results
+for(i in 1:4){
+  training <- kfold_sev[which(kfold_sev$split <= i), ] 
+  test <- kfold_sev[which(kfold_sev$split == i+1), ]
+  
+  model <- glm(Mean_claim_amount ~ state_group+sum_insured+vehicle_risk+CPI_index, data = training, family = gaussian(link = "log"))
+  print(summary(model))
+  
+  gammaCV <- rbind(gammaCV, rootmse_sev(model, test, training))
+}
+gammaCV
 
 
 #####################################################################
