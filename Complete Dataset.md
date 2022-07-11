@@ -18,6 +18,7 @@ gold <- read.csv("GoldData.csv", header = TRUE)
 road_deaths <- read.csv("Road_Deaths.csv", header = TRUE)
 unemployment <- read.csv("unemploymentrate.csv", header = TRUE)
 maintenance <- read.csv("data_petrol.csv", header = TRUE)
+USDAUD <- read.csv("PriceHistoryAUDUSD.csv", header = TRUE)
 
 data$accident_month <- as.Date(data$accident_month)
 data$claim_loss_date <- as.Date(data$claim_loss_date)
@@ -104,7 +105,11 @@ maintenance[c("quarter")] <- as.numeric(maintenance$Year) + 2000 + 0.1*(as.numer
 colnames(maintenance)[8] <- "maintenance_index"
 external <- merge(external, maintenance[c("quarter", "maintenance_index")], by = "quarter")
 
-
+# Merge USD/AUD exchange rate
+USDAUD[c("Month", "Day", "Year")] <- str_split_fixed(USDAUD$Date, "/", 3)  # Split date into time periods
+USDAUD[c("quarter")] <- as.numeric(USDAUD$Year) + 2000 + 0.1*(as.numeric(USDAUD$Month)/3) # Transform dates to year.quarter
+colnames(USDAUD)[2] <- "USDAUD"
+external <- merge(external, USDAUD[c("quarter", "USDAUD")], by = "quarter")
 
 # Frequency vs Severity variables
 freq <- c("petrol_price", "lag_petrol_price", "vehicle_sales", "lag_vehicle_sales")
