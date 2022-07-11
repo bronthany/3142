@@ -20,6 +20,7 @@ unemployment <- read.csv("unemploymentrate.csv", header = TRUE)
 maintenance <- read.csv("data_petrol.csv", header = TRUE)
 USDAUD <- read.csv("PriceHistoryAUDUSD.csv", header = TRUE)
 JPYAUD <- read.csv("PriceHistoryJPYAUD.csv", header = TRUE)
+CNYAUD <- read.csv("PriceHistoryCNYAUD.csv", header = TRUE)
 
 data$accident_month <- as.Date(data$accident_month)
 data$claim_loss_date <- as.Date(data$claim_loss_date)
@@ -117,6 +118,12 @@ JPYAUD[c("Month", "Day", "Year")] <- str_split_fixed(JPYAUD$Date, "/", 3)  # Spl
 JPYAUD[c("quarter")] <- as.numeric(JPYAUD$Year) + 2000 + 0.1*(as.numeric(JPYAUD$Month)/3) # Transform dates to year.quarter
 colnames(JPYAUD)[2] <- "JPYAUD"
 external <- merge(external, JPYAUD[c("quarter", "JPYAUD")], by = "quarter")
+
+# Merge CNY/AUD exchange rate
+CNYAUD[c("Month", "Day", "Year")] <- str_split_fixed(CNYAUD$Date, "/", 3)  # Split date into time periods
+CNYAUD[c("quarter")] <- as.numeric(CNYAUD$Year) + 2000 + 0.1*(as.numeric(CNYAUD$Month)/3) # Transform dates to year.quarter
+colnames(CNYAUD)[2] <- "CNYAUD"
+external <- merge(external, CNYAUD[c("quarter", "CNYAUD")], by = "quarter")
 
 # Frequency vs Severity variables
 freq <- c("petrol_price", "lag_petrol_price", "vehicle_sales", "lag_vehicle_sales")
