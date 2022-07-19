@@ -575,3 +575,43 @@ full.model <- zeroinfl(Claim_number ~ vehicle_risk + vehicle_sales + road_deaths
 step.model <- stepAIC(full.model, direction = "backward", 
                       trace = FALSE)
 summary(step.model)
+
+# ADELA - negative binomial odTest: likelihood ratio test for over-dispersion in count data #
+
+nb_model <- glm.nb(Claim_number ~ vehicle_risk + lag_petrol_price + lag_vehicle_sales + 
+                     risk_state_name + policy_tenure + unemployment + JPYAUD , data=d1.train)
+
+odTest(nb_model)
+
+# 10-fold negative binomial
+
+cv.error <- rep(0, 10) 
+  
+for (i in 1:10) {
+  nb_model
+  cv.error[i] <- cv.glm(d1.train, nb_model,K=10)$delta[1]
+}
+
+# cv.error  = [0.02580447 0.02580455 0.02580457 0.02580452 0.02580486 0.02580399 0.02580409 0.02580436 0.02580348 0.00000000] #
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
