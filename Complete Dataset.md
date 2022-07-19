@@ -508,106 +508,58 @@ library(forcats)
 library(AER)
 library(pscl)
 install.packages("countreg", repos="http://R-Forge.R-project.org")
-#Attaching data for modeling
-data4 <- d1.train
+
 ##data partition - original data
-data <- data4
-data_partition <- createDataPartition(data$Claim_number, times = 1,p = 0.8,list = FALSE)
+data_zinb <- quarterly.d1
+data_partition <- createDataPartition(data_zinb$Claim_number, times = 1,p = 0.8,list = FALSE)
 str(data_partition)
-training <- data[data_partition,]
-testing  <- data[-data_partition,]
+training_zinb <- data_zinb[data_partition,]
+testing_zinb  <- data_zinb[-data_partition,]
+
 #Re-sampling
 sample1 <- subset(data4, Claim_number!=0)
-sample2 <- data4[ sample( which(data4$Claim_number==0), 
-                          round(0.9*length(which(data4$Claim_number==0)))), ]
-sample3 <- data4[ sample( which(data4$Claim_number==0), 
-                          round(0.1*length(which(data4$Claim_number==0)))), ]
+sample2 <- quarterly.d1[ sample( which(quarterly.d1$Claim_number==0), 
+                          round(0.9*length(which(quarterly.d1$Claim_number==0)))), ]
+sample3 <- quarterly.d1[ sample( which(quarterly.d1$Claim_number==0), 
+                          round(0.1*length(which(quarterly.d1$Claim_number==0)))), ]
 y <- rnbinom(n = dim(sample3)[1], mu = 1, size = 3) # n value should be equal to sample 3
 sample3$Claim_number <- y
 df_sample <- rbind(sample1,sample2,sample3)
 
 ##data partition - re-sampled data
-data <- data4
-data_partition <- createDataPartition(data$Claim_number, times = 1,p = 0.8,list = FALSE)
+data_zinb <- quarterly.d1
+data_partition <- createDataPartition(data_zinb$Claim_number, times = 1,p = 0.8,list = FALSE)
 str(data_partition)
-training <- data[data_partition,]
-testing  <- data[-data_partition,]
-
-#Poisson model with offset
-poissonglm <- glm(Claim_number ~ vehicle_risk + lag_petrol_price +
-                    risk_state_name + policy_tenure + lag_petrol_price,
-                  data=training, family = "poisson", offset=log(exposure))
-summary(poissonglm)
+training_zinb <- data_zinb[data_partition,]
+testing_zinb  <- data_zinb[-data_partition,]
 
 # Test for dispersion
 dispersiontest(poissonglm,trafo=1)
-#Quasipoisson model with weight
-qpoissonglm <- glm(Claim_number ~ vehicle_risk + lag_petrol_price +
-                     risk_state_name + policy_tenure + lag_petrol_price,
-                   data=training, family = "quasipoisson",weight = exposure)
-summary(qpoissonglm)
-#Negative Binomial model with offset
-nbglm <- glm.nb(Claim_number ~ vehicle_risk + lag_petrol_price +
-                  risk_state_name + policy_tenure + lag_petrol_price,
-                data=training, offset=log(exposure),control = glm.control(maxit=10000))
-summary(nbglm)
-#Zero Inflation Poisson model with offset
-zip <- zeroinfl(Claim_number ~ vehicle_risk + lag_petrol_price +
-                  risk_state_name + policy_tenure + lag_petrol_price,
-                data=training, offset=log(exposure),dist = "poisson",link= "logit")
-summary(zip)
+
 #Zero Inflation Negative Binomial model with offset
-zinb <- zeroinfl(Claim_number ~ vehicle_risk + lag_petrol_price +
-                   risk_state_name + policy_tenure + lag_petrol_price,
-                 offset=log(exposure),data=training,dist = "negbin",link= "logit")
-summary(zinb)
-#Hurdle Negative Binomial model with offset
-hurdlenb <- hurdle(Claim_number ~ vehicle_risk + lag_petrol_price +
-                     risk_state_name + policy_tenure + lag_petrol_price, data=training,
-                 offset=log(exposure),dist ="negbin",zero.dist = "negbin",link= "logit")
-summary(hurdlenb)
-#Hurdle Poisson model with offset
-hurdlepoisson <- hurdle(Claim_number ~ vehicle_risk + lag_petrol_price +
-                          risk_state_name + policy_tenure + lag_petrol_price,
-                        data=training, offset=log(exposure),dist ="poisson",zero.dist = "poisson",link= "logit")
-summary(hurdlepoisson)
+# Step model
+zinb <- zeroinfl(Claim_number ~ vehicle_risk + vehicle_sales + policy_tenure + lag_petrol_price + 
+                   lag_gold + maintenance_index,
+                 offset=log(exposure),data=training_zinb,dist = "negbin",link= "logit")
+summary(zinb) 
+
 #Save models
-save(poissonglm, file = "poissonglm.rda")
-save(nbglm, file = "nbglm.rda")
 save(zinb, file = "zinb.rda")
-save(zip, file = "zip.rda")
-save(hurdlepoisson, file = "hurdlepoisson.rda")
-save(hurdlenb, file = "hurdlenb.rda")
+
 #Load Models
-load("poissonglm.rda")
-load("nbglm.rda")
 load("zinb.rda")
-load("zip.rda")
-load("hurdlepoisson.rda")
-load("hurdlenb.rda")
+
 # Codes to predict zero claims:
 zero_counts <- data.frame(round(c("Obs" = sum(training$Claim_number < 1),
-                                  "poissonglm" = sum(exp(-predict(poissonglm, training, type = "response"))),
-                                  "nbglm" = sum(dnbinom(0, mu = fitted(nbglm), size = nbglm$theta)),
-                                  "hurdlepoisson" = sum(predict(hurdlepoisson, training, type = "prob")[,1]),
-                                  "hurdlenb" = sum(predict(hurdlenb, training,type = "prob")[,1]),
-                                  "zip" = sum(predict(zip, training,type = "prob")[,1]),
-                                  "zinb" = sum(predict(zinb, training,type = "prob")[,1]))))
+                                  "zinb" = sum(predict(zinb, testing_zinb,type = "prob")[,1]))))
 # Installing and running rootogram
 install.packages("countreg", repos="http://R-Forge.R-project.org")
 library(countreg)
-par(mfrow = c(1, 2))
-rootogram(poissonglm,max = 10,main="Poisson") # fit up to count 10
-rootogram(nbglm,max = 10,main="NB") # fit up to count 10
-par(mfrow = c(1, 1))
-rootogram(zip,max = 10,main="ZIP") # fit up to count 10
+par(mfrow = c(1, 1)) 
 rootogram(zinb,max = 10,main="ZINB") # fit up to count 10
-par(mfrow = c(1, 1))
-rootogram(hurdlepoisson,max = 10,main="Hurdle-P")# fit up to count 10
-rootogram(hurdlenb,max = 10,main="Hurdle-NB") # fit up to count 10
-par(mfrow = c(1, 1))
-#Log likelyhood for all the models
-models <- list("Pois" = poissonglm, "NB" = nbglm, "ZIP-POI" = zip,"ZIP-NB" = zinb,"Hurdle-POI" = hurdlepoisson,"Hurdle-NB" = hurdlenb)
+
+#Log likelyhood for the models
+models <- list("ZIP-NB" = zinb)
 df_log <- data.frame(rbind(logLik = sapply(models, function(x) round(logLik(x), digits = 0)),
                            Df = sapply(models, function(x) attr(logLik(x), "df"))))
 
