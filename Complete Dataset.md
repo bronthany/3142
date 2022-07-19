@@ -563,3 +563,15 @@ models <- list("ZIP-NB" = zinb)
 df_log <- data.frame(rbind(logLik = sapply(models, function(x) round(logLik(x), digits = 0)),
                            Df = sapply(models, function(x) attr(logLik(x), "df"))))
 
+
+# CATHY - Backward selection
+## Backward selection (takes a long time)
+full.model <- zeroinfl(Claim_number ~ vehicle_risk + vehicle_sales + road_deaths+
+                         risk_state_name + policy_tenure + lag_petrol_price + lag_unemployment +
+                         USDAUD + JPYAUD + CNYAUD + gold + petrol_price + manufacture +
+                         lag_gold + unemployment + maintenance_index,
+                       data=training_zinb,dist = "negbin",link= "logit")
+
+step.model <- stepAIC(full.model, direction = "backward", 
+                      trace = FALSE)
+summary(step.model)
