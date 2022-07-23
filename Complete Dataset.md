@@ -204,6 +204,7 @@ training_d1 <- quarterly.d1$Date < as.Date("2020-07-31")
 d1.train <- quarterly.d1[training_d1,]
 d1.test <- quarterly.d1[!training_d1,]
 
+
 # Training Data set - Severity data set
 training_d2 <- quarterly.d2$Date < as.Date("2020-07-31")
 d2.train <- quarterly.d2[training_d2,]
