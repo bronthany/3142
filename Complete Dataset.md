@@ -191,6 +191,23 @@ quarterly.d2 <- quarterly.d2 %>% mutate(state_group = case_when(
   TRUE ~ "Other"
 )) # Grouping States based off preliminary modelling results
 
+quartclaim <- quarterly.d1 %>%
+  group_by(quarter) %>% summarise(QuarterlyClaim = sum(Claim_number))
+
+quarterly.d2 <- full_join(quarterly.d2, quartclaim, by = "quarter")
+
+quarterly.d2 <- merge(quarterly.d2, quarterly.d1[c("policy_id", "quarter", "Claim_number")], by = c("quarter", "policy_id"))
+dependence <- quarterly.d2 %>% group_by(Claim_number) %>% summarise(meansev = mean(Mean_claim_amount))
+
+# Training and test data set - Frequency data set
+training_d1 <- quarterly.d1$Date < as.Date("2020-07-31")
+d1.train <- quarterly.d1[training_d1,]
+d1.test <- quarterly.d1[!training_d1,]
+
+# Training Data set - Severity data set
+training_d2 <- quarterly.d2$Date < as.Date("2020-07-31")
+d2.train <- quarterly.d2[training_d2,]
+d2.test <- quarterly.d2[!training_d2,]
 
 
 ### K-FOLD CV for Time Series Data ###
@@ -214,9 +231,9 @@ rootmse <- function(model, testset, trainingset){
   return(rmse)
 }
 
-  # Using K = 5, split data set into 5 folds.
+  # Using K = 10, split data set into 10 folds.
 Date <- unique(quarterly.d1$Date) # 20 quarters. 
-split <- rep(1:5, each = 4, length.out = 20) # Using K = 5, split into 5 groups with the last group consisting of 3 quarters only.
+split <- rep(1:10, each = 2, length.out = 20) # Using K = 10, split into 10 groups with the last group consisting of 3 quarters only.
 split <- cbind(Date, split)
 
 kfold_freq <- merge(quarterly.d1, split, by = "Date")
@@ -281,19 +298,21 @@ ggplot(visual, aes(Date, real_claims, group = 1)) +
 #Gamma GLM
 ###########
 
-fit101 <- glm(Mean_claim_amount ~ state_group+sum_insured+vehicle_risk+CPI_index, data = d2.train, family = Gamma(link = "log"))
+fit101 <- glm(Mean_claim_amount ~ state_group + sum_insured + vehicle_risk + CPI_index + Claim_number + year_of_manufacture + petrol_price + vehicle_sales + road_deaths +  maintenance_index + USDAUD, data = d2.train, family = Gamma(link = "log"))
 summary(fit101)
-#Residual Deviance: 6735.7
-#AIC: 102365
-#Good predictors: state_group, sum_insured, vehicle_risk, CPI_index
-#Bad predictors: import_index, lag_CPI_index, gold, road_deaths, unemployment
+fit102 <- step(fit101, direction = "both")
+#Predictors: state_group, sum_insured, vehicle_risk, year_of_manufacture, petrol_price, maintenance_index
+#Residual Deviance: 6700.5
+#AIC: 102334
 
-fit101pred <- predict(fit101, newdata = d2.test, type = "response") #Prediction
-fit101rmse <- rmse(actual = d2.test$Mean_claim_amount, predicted = fit101pred) #RMSE: 9210.70 (after removing outliers)
+#cor(model.matrix(fit102)[,-1])
+
+fit101pred <- predict(fit102, newdata = d2.test, type = "response") #Prediction
+fit101rmse <- rmse(actual = d2.test$Mean_claim_amount, predicted = fit101pred) #RMSE: 9235.80 (after removing outliers)
 d2.pred101 <- cbind(d2.test, fit101pred)
 
-fit101trainpred <- predict(fit101, newdata = d2.train, type = "response")
-fit101trainrmse <- rmse(actual = d2.train$Mean_claim_amount, predicted = fit101trainpred) #RMSE: 8175.72 (after removing outliers)
+fit101trainpred <- predict(fit102, newdata = d2.train, type = "response")
+fit101trainrmse <- rmse(actual = d2.train$Mean_claim_amount, predicted = fit101trainpred) #RMSE: 8660.75 (after removing outliers)
 
 d2.trainpred101 <- d2.train %>%
   mutate(pred = fit101trainpred) %>%
@@ -314,16 +333,24 @@ ggplot(visual, aes(Date, real_size, group = 1)) +
 #Log-linked Gaussian GLM
 ########
 
-fit202 <- glm(Mean_claim_amount ~ state_group + sum_insured + vehicle_risk + CPI_index, data = d2.train, family = gaussian(link = "log"))
+fit202 <- glm(Mean_claim_amount ~ state_group + sum_insured + vehicle_risk + CPI_index + Claim_number + year_of_manufacture + petrol_price + vehicle_sales + road_deaths +  maintenance_index + USDAUD, data = d2.train, family = gaussian(link = "log"))
 summary(fit202)
+fit203 <- step(fit202, direction = "both")
+#Predictors: state_group, sum_insured, vehicle_risk, year_of_manufacture, petrol_price, maintenance_index
+#Residual Deviance: 2.98e+11
+#AIC: 109496
+
+
+#cor(model.matrix(fit203)[,-1])
+
 fit202pred <- predict(fit202, newdata = d2.test, type = "response") #Prediction
-fit202rmse <- rmse(actual = d2.test$Mean_claim_amount, predicted = fit202pred) #RMSE: 8230.45
+fit202rmse <- rmse(actual = d2.test$Mean_claim_amount, predicted = fit202pred) #RMSE: 8590.06
 
 
 d2.pred202 <- cbind(d2.test, fit202pred)
 
 fit202trainpred <- predict(fit202, newdata = d2.train, type = "response")
-fit202trainrmse <- rmse(actual = d2.train$Mean_claim_amount, predicted = fit202trainpred) #RMSE: 7511.32 (after removing outliers)
+fit202trainrmse <- rmse(actual = d2.train$Mean_claim_amount, predicted = fit202trainpred) #RMSE: 7497.78 (after removing outliers)
 
 
 d2.trainpred202 <- d2.train %>%
@@ -360,18 +387,35 @@ rootmse_sev <- function(model, testset, trainingset){
 }
 
 
-# Perform k-fold CV on a rolling basis (for Severity)
+# Perform k-fold CV on a rolling basis
 gammaCV <- data.table("Training RMSE" = numeric(), "Test RMSE" = numeric()) # Create empty table to store results
-for(i in 1:4){
+for(i in 1:9){
   training <- kfold_sev[which(kfold_sev$split <= i), ] 
   test <- kfold_sev[which(kfold_sev$split == i+1), ]
   
-  model <- glm(Mean_claim_amount ~ state_group+sum_insured+vehicle_risk+CPI_index, data = training, family = gaussian(link = "log"))
-  print(summary(model))
+  model <- fit102
+  #print(summary(model))
   
   gammaCV <- rbind(gammaCV, rootmse_sev(model, test, training))
 }
 gammaCV
+print(mean(gammaCV$`Test RMSE`[1:6]))
+print(mean(gammaCV$`Test RMSE`[7:9]))
+
+gaussianCV <- data.table("Training RMSE" = numeric(), "Test RMSE" = numeric()) # Create empty table to store results
+for(i in 1:9){
+  training <- kfold_sev[which(kfold_sev$split <= i), ] 
+  test <- kfold_sev[which(kfold_sev$split == i+1), ]
+  
+  model <- fit202
+  #print(summary(model))
+  
+  gaussianCV <- rbind(gaussianCV, rootmse_sev(model, test, training))
+}
+gaussianCV
+print(mean(gaussianCV$`Test RMSE`[1:6]))
+print(mean(gaussianCV$`Test RMSE`[7:9]))
+
 
 
 #####################################################################
