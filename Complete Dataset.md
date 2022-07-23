@@ -393,7 +393,8 @@ for(i in 1:9){
   training <- kfold_sev[which(kfold_sev$split <= i), ] 
   test <- kfold_sev[which(kfold_sev$split == i+1), ]
   
-  model <- fit102
+  model <- model <- glm(Mean_claim_amount ~ state_group + sum_insured + vehicle_risk + year_of_manufacture + petrol_price + maintenance_index, 
+               data = training, family = Gamma(link = "log"))
   #print(summary(model))
   
   gammaCV <- rbind(gammaCV, rootmse_sev(model, test, training))
@@ -407,7 +408,8 @@ for(i in 1:9){
   training <- kfold_sev[which(kfold_sev$split <= i), ] 
   test <- kfold_sev[which(kfold_sev$split == i+1), ]
   
-  model <- fit202
+  model <- glm(Mean_claim_amount ~ state_group + sum_insured + vehicle_risk + year_of_manufacture + petrol_price + maintenance_index, 
+               data = training, family = gaussian(link = "log"))
   #print(summary(model))
   
   gaussianCV <- rbind(gaussianCV, rootmse_sev(model, test, training))
