@@ -204,11 +204,20 @@ training_d1 <- quarterly.d1$Date < as.Date("2020-07-31")
 d1.train <- quarterly.d1[training_d1,]
 d1.test <- quarterly.d1[!training_d1,]
 
+# 80% split
+d1.80 <- c(1:(0.8*length(quarterly.d1$quarter)))
+d1.train80 <- quarterly.d1[d1.80, ]
+d1.test20 <- quarterly.d1[-d1.80,]
 
 # Training Data set - Severity data set
 training_d2 <- quarterly.d2$Date < as.Date("2020-07-31")
 d2.train <- quarterly.d2[training_d2,]
 d2.test <- quarterly.d2[!training_d2,]
+
+# 80% split
+d2.80 <- c(1:(0.8*length(quarterly.d2$quarter)))
+d2.train80 <- quarterly.d2[d2.80, ]
+d2.test20 <- quarterly.d2[-d2.80,]
 
 
 ### K-FOLD CV for Time Series Data ###
