@@ -149,21 +149,24 @@ quarterly.d1 <- d1 %>%
             risk_state_name = last(risk_state_name),
             vehicle_class = last(vehicle_class),
             policy_tenure = last(policy_tenure),
-            vehicle_risk = last(vehicle_risk))
+            vehicle_risk = last(vehicle_risk),
+            sum_insured = last(sum_insured),
+            year_of_manufacture = last(year_of_manufacture))
 
 hist(quarterly.d1$Claim_number)
 table(quarterly.d1$Claim_number)  #  0      1      2      3      4      5      6 
                               # 390180   5481    869     49     43      1      3 
-visual.d1 <- quarterly.d1 %>%
-  group_by(Date) %>%
-  summarise(Claim_number = sum(Claim_number),
-            Policy_number = n())
-ggplot(visual.d1, aes(Date, Claim_number, group = 1))+
-  geom_line() 
 
 # Combining External data -- #
 quarterly.d1 <- merge(quarterly.d1, external[, !colnames(external) %in% severity], by = "quarter")
-
+quarterly.d1 <- quarterly.d1 %>%
+  mutate(state_level = case_when(
+    risk_state_name == "NT" ~ "Other",
+    risk_state_name == "WA" ~ "Other",
+    TRUE ~ as.character(risk_state_name)
+  ))
+  
+ quarterly.d1 <- merge(quarterly.d1, gas_perstate[c("quarter", "risk_state_name", "loggas")], by = c("quarter", "risk_state_name"))
 
 #### SEVERITY DATA TRANSFORMATION ####
 
