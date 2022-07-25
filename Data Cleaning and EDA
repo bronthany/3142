@@ -215,7 +215,8 @@ quarterly.d1 <- d1 %>%
             policy_tenure = last(policy_tenure),
             vehicle_risk = last(vehicle_risk),
             sum_insured = last(sum_insured),
-            year_of_manufacture = last(year_of_manufacture))
+            year_of_manufacture = last(year_of_manufacture),
+            region = last(region))
 
 hist(quarterly.d1$Claim_number)
 table(quarterly.d1$Claim_number)  
@@ -246,7 +247,8 @@ quarterly.d2 <- d2 %>%
             vehicle_risk = last(vehicle_risk),
             policy_tenure = last(policy_tenure),
             sum_insured = last(sum_insured),
-            year_of_manufacture = last(year_of_manufacture))
+            year_of_manufacture = last(year_of_manufacture),
+            region = last(region))
 quarterly.d2 <- quarterly.d2[quarterly.d2$Mean_claim_amount < quantile(quarterly.d2$Mean_claim_amount,0.99),]
 ggplot(quarterly.d2, aes(x = Mean_claim_amount)) +
   geom_histogram(fill = "black", colour = "black", binwidth = 2000)
