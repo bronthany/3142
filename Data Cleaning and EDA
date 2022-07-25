@@ -23,6 +23,7 @@ maintenance <- read.csv("data_petrol.csv", header = TRUE)
 USDAUD <- read.csv("PriceHistoryAUDUSD.csv", header = TRUE)
 JPYAUD <- read.csv("PriceHistoryJPYAUD.csv", header = TRUE)
 CNYAUD <- read.csv("PriceHistoryCNYAUD.csv", header = TRUE)
+regions <- read.csv("postcodes.csv", header = TRUE, stringsAsFactors = TRUE)
 
 data$accident_month <- as.Date(data$accident_month)
 data$claim_loss_date <- as.Date(data$claim_loss_date)
@@ -168,6 +169,29 @@ external <- merge(external, gas[c("quarter", "gas_change", "standardgas", "logga
 freq <- c()
 severity <- c("CPI_index", "import_index", "lag_CPI_index")
 
+
+# Assign Postcodes to each Region
+regions <- regions %>% mutate(region = case_when(
+  RA_NAME_2016 %in% c("Very Remote Australia", "Remote Australia") ~ "Remote Australia", #Combine Remote Classifications
+  TRUE ~ as.character(RA_NAME_2016) 
+)) %>%
+  rename("risk_postcode" = POSTCODE_2017) %>%
+  group_by(risk_postcode, region) %>% 
+  summarise(RATIO = sum(RATIO)) %>% 
+  mutate(chosen = RATIO > 0.5) #If postcodes have multiple regions, assign postcode to region with highest proportion
+regions <- regions[regions$chosen, ]
+
+postcode <- unique(data$risk_postcode)
+postcode <- data.table("risk_postcode" = unique(data$risk_postcode))
+postcode <- merge(postcode, regions[c("risk_postcode", "region")], by = "risk_postcode") #Assign region to each postcode
+
+data <- data %>%
+  mutate(risk_postcode = case_when(
+    risk_postcode == 4219 ~ 4220, # 4219 did not have a region, but in the same area as 4220
+    risk_postcode == 6331 ~ 6330, # 6331 is same suburb as 6330
+    TRUE ~ as.numeric(risk_postcode)
+  ))
+data <- merge(data, postcode, by = c("risk_postcode"))
 
 
 ### FREQUENCY ###
