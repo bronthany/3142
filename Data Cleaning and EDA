@@ -42,3 +42,222 @@ data <- data %>% mutate(vehicle_risk = case_when(
   TRUE ~ "High Risk Vehicle"
 )) # Add Vehicle Risk Class (i.e. combining Vehicle Classes)
 data$vehicle_risk <- as.factor(data$vehicle_risk)
+
+### EXTERNAL DATA ####
+# Merge CPI and Import Index
+CPI <- rbind(CPI, data.frame(X = 21, Date = "2021-06-01", CPI.Index = 118.8))
+external <- merge(CPI, importindex, by = "Date")
+cor(external$CPI.Index, external$Index.numbers) # 0.7475
+
+external <- external %>%
+  mutate(quarter = year(Date) + quarter(Date)*0.1) %>%
+  dplyr::select(-c(X)) %>%
+  dplyr::rename("import_index" = Index.numbers,
+         "CPI_index" = CPI.Index) %>% # Convert date to year.quarter
+  mutate("lag_CPI_index" = lag(CPI_index)) # Add lagged CPI by 1 quarter
+
+# Merge Petrol Prices 
+names(petrol_prices)[2] = "quarter"
+petrol_prices <- petrol_prices %>%
+  mutate("lag_petrol_price" = lag(petrol_price)) # Add lagged petrol price by 1 quarter
+external <- merge(external, petrol_prices[, -1], by = "quarter")
+
+
+# Merge Motor Vehicle Sales
+motor_sales[c("Month", "Year")] <- str_split_fixed(motor_sales$Date, "-", 2)
+motor_sales[c("quarter")] <- ifelse(motor_sales$Month == "Jan" | motor_sales$Month == "Feb" | motor_sales$Month == "Mar", 1,
+                                    ifelse(motor_sales$Month == "Apr" | motor_sales$Month == "May" | motor_sales$Month == "Jun", 2,
+                                           ifelse(motor_sales$Month == "Jul" | motor_sales$Month == "Aug" | motor_sales$Month == "Sep", 3,
+                                                  ifelse(motor_sales$Month == "Oct" | motor_sales$Month == "Nov" | motor_sales$Month == "Dec", 4, NA)))
+)
+motor_sales[c("quarter")] <- motor_sales$quarter * 0.1 + as.numeric(motor_sales$Year)
+
+# Data is monthly. Sum motor vehicle sales by quarter to get quarterly value
+motor_sales <- motor_sales %>% 
+  group_by(quarter) %>%
+  summarise(Units = sum(Units)) %>%
+  dplyr::rename("vehicle_sales" = Units) %>%
+  mutate("lag_vehicle_sales" = lag(vehicle_sales))
+
+# Merge into external data set
+external <- merge(external, motor_sales, by = "quarter")
+
+
+# Merge Gold data
+gold[c("Day", "Month", "Year")] <- str_split_fixed(gold$Quarter, "/", 3)  # Split date into time periods
+gold[c("quarter")] <- as.numeric(gold$Year) + 0.1*(as.numeric(gold$Month)/3) + 2000 # Transform dates to year.quarter
+colnames(gold)[2] <- "gold" 
+external <- merge(external, gold[c("quarter", "gold")], by = "quarter")
+
+
+# Merge Road Deaths data
+road_deaths[c("Day", "Month", "Year")] <- str_split_fixed(road_deaths$Quarter, "/", 3)  # Split date into time periods
+road_deaths[c("quarter")] <- as.numeric(road_deaths$Year) + 0.1*(as.numeric(road_deaths$Month)/3) # Transform dates to year.quarter
+colnames(road_deaths)[2] <- "road_deaths"
+external <- merge(external, road_deaths[c("quarter", "road_deaths")], by = "quarter")
+
+
+
+# Merge Unemployment data
+unemployment[c("Day", "Month", "Year")] <- str_split_fixed(unemployment$Quarter, "/", 3)  # Split date into time periods
+unemployment[c("quarter")] <- as.numeric(unemployment$Year) + 0.1*(as.numeric(unemployment$Month)/3) # Transform dates to year.quarter
+colnames(unemployment)[2] <- "unemployment"
+external <- merge(external, unemployment[c("quarter", "unemployment")], by = "quarter")
+
+# Merge Maintenance and Repair Index
+maintenance[c("Day", "Month", "Year")] <- str_split_fixed(maintenance$Date, "/", 3)  # Split date into time periods
+maintenance[c("quarter")] <- as.numeric(maintenance$Year) + 2000 + 0.1*(as.numeric(maintenance$Month)/3) # Transform dates to year.quarter
+colnames(maintenance)[8] <- "maintenance_index"
+external <- merge(external, maintenance[c("quarter", "maintenance_index")], by = "quarter")
+
+# Merge USD/AUD exchange rate
+USDAUD[c("Month", "Day", "Year")] <- str_split_fixed(USDAUD$Date, "/", 3)  # Split date into time periods
+USDAUD[c("quarter")] <- as.numeric(USDAUD$Year) + 2000 + 0.1*(as.numeric(USDAUD$Month)/3) # Transform dates to year.quarter
+colnames(USDAUD)[2] <- "USDAUD"
+external <- merge(external, USDAUD[c("quarter", "USDAUD")], by = "quarter")
+
+
+# Merge JPY/AUD exchange rate
+JPYAUD[c("Month", "Day", "Year")] <- str_split_fixed(JPYAUD$Date, "/", 3)  # Split date into time periods
+JPYAUD[c("quarter")] <- as.numeric(JPYAUD$Year) + 2000 + 0.1*(as.numeric(JPYAUD$Month)/3) # Transform dates to year.quarter
+colnames(JPYAUD)[2] <- "JPYAUD"
+external <- merge(external, JPYAUD[c("quarter", "JPYAUD")], by = "quarter")
+
+
+# Merge CNY/AUD exchange rate
+CNYAUD[c("Month", "Day", "Year")] <- str_split_fixed(CNYAUD$Date, "/", 3)  # Split date into time periods
+CNYAUD[c("quarter")] <- as.numeric(CNYAUD$Year) + 2000 + 0.1*(as.numeric(CNYAUD$Month)/3) # Transform dates to year.quarter
+colnames(CNYAUD)[2] <- "CNYAUD"
+external <- merge(external, CNYAUD[c("quarter", "CNYAUD")], by = "quarter")
+
+
+# Merge Diesel and Petrol Consumption
+summary(gas_perstate)
+
+gas_perstate[c("Month", "Year")] <- str_split_fixed(gas_perstate$Month, "-", 2)
+gas_perstate[c("quarter")] <- ifelse(gas_perstate$Month == "Jan" | gas_perstate$Month == "Feb" | gas_perstate$Month == "Mar", 1,
+                                        ifelse(gas_perstate$Month == "Apr" | gas_perstate$Month == "May" | gas_perstate$Month == "Jun", 2,
+                                               ifelse(gas_perstate$Month == "Jul" | gas_perstate$Month == "Aug" | gas_perstate$Month == "Sep", 3,
+                                                      ifelse(gas_perstate$Month == "Oct" | gas_perstate$Month == "Nov" | gas_perstate$Month == "Dec", 4, NA)))
+)
+gas_perstate[c("quarter")] <- gas_perstate$quarter * 0.1 + as.numeric(gas_perstate$Year) + 2000
+
+gas_perstate <- gas_perstate %>%
+  group_by(risk_state_name, quarter) %>%
+  summarise(gas_used = sum(Diesel_petrol_total),
+            automotivegas = sum(Automotive.gasoline))
+
+
+# Percent Change Gas
+gas[c("Month", "Year")] <- str_split_fixed(gas$Month, " ", 2)
+gas[c("quarter")] <- ifelse(gas$Month == "Jan" | gas$Month == "Feb" | gas$Month == "Mar", 1,
+                            ifelse(gas$Month == "Apr" | gas$Month == "May" | gas$Month == "Jun", 2,
+                                   ifelse(gas$Month == "Jul" | gas$Month == "Aug" | gas$Month == "Sep", 3,
+                                          ifelse(gas$Month == "Oct" | gas$Month == "Nov" | gas$Month == "Dec", 4, NA))))
+gas[c("quarter")] <- gas$quarter*0.1 + as.numeric(gas$Year)
+gas <- gas %>%
+  group_by(quarter) %>%
+  summarise(gas = sum(Automotive.gasoline.total)) %>%
+  mutate(gas_change = (gas/lag(gas)-1)*100,
+         standardgas = gas/sd(gas),
+         loggas = log(gas))
+external <- merge(external, gas[c("quarter", "gas_change", "standardgas", "loggas")], by = "quarter")
+
+
+# Frequency vs Severity variables
+freq <- c()
+severity <- c("CPI_index", "import_index", "lag_CPI_index")
+
+
+
+### FREQUENCY ###
+
+# Cleaning
+d1 <- data
+d1$Indicator <- ifelse(!d1$total_claims_cost == 0, 1, 0) #Indicator, 1 if claim, 0 if no claim
+d1 <- d1 %>% 
+  group_by(policy_id, accident_month) %>%
+  mutate(Claim_number = sum(Indicator))# Calculate total claim number per month per policy
+d1 <- d1[!d1$exposure == 0,] # Remove 0 exposure entries
+
+# Transforming frequency dataset to quarterly data
+quarterly.d1 <- d1 %>%
+  group_by(policy_id, quarter) %>%
+  summarise(exposure = sum(exposure), 
+            Claim_number = sum(Claim_number),
+            Indicator = last(Indicator),
+            risk_state_name = last(risk_state_name),
+            vehicle_class = last(vehicle_class),
+            policy_tenure = last(policy_tenure),
+            vehicle_risk = last(vehicle_risk),
+            sum_insured = last(sum_insured),
+            year_of_manufacture = last(year_of_manufacture))
+
+hist(quarterly.d1$Claim_number)
+table(quarterly.d1$Claim_number)  
+#     0      1      2      3      4      5      6 
+# 390180   5481    869     49     43      1      3 
+
+# Combining External data -- #
+quarterly.d1 <- merge(quarterly.d1, external[, !colnames(external) %in% severity], by = "quarter")
+quarterly.d1 <- quarterly.d1 %>%
+  mutate(state_level = case_when(
+    risk_state_name == "NT" ~ "Other",
+    risk_state_name == "WA" ~ "Other",
+    TRUE ~ as.character(risk_state_name)
+  ))
+
+quarterly.d1 <- merge(quarterly.d1, gas_perstate[c("quarter", "risk_state_name", "automotivegas", "gas_used")], by = c("quarter", "risk_state_name"))
+
+
+### SEVERITY ###
+
+# Change Severity Data set into quarters, remove no claim entries
+d2 <- data %>% filter(total_claims_cost != 0) # Severity data set only has claims
+quarterly.d2 <- d2 %>%
+  group_by(policy_id, quarter) %>%
+  summarise(Mean_claim_amount = mean(total_claims_cost),
+            risk_state_name = last(risk_state_name),
+            vehicle_class = last(vehicle_class),
+            vehicle_risk = last(vehicle_risk),
+            policy_tenure = last(policy_tenure),
+            sum_insured = last(sum_insured),
+            year_of_manufacture = last(year_of_manufacture))
+quarterly.d2 <- quarterly.d2[quarterly.d2$Mean_claim_amount < quantile(quarterly.d2$Mean_claim_amount,0.99),]
+ggplot(quarterly.d2, aes(x = Mean_claim_amount)) +
+  geom_histogram(fill = "black", colour = "black", binwidth = 2000)
+
+# Combining External data -- #
+quarterly.d2 <- merge(quarterly.d2, external[, !colnames(external) %in% freq], by = "quarter")
+quarterly.d2 <- quarterly.d2 %>% mutate(state_group = case_when(
+  risk_state_name == "NSW" ~ "NSW",
+  risk_state_name == "VIC" ~ "VIC",
+  risk_state_name == "QLD" ~ "QLD",
+  TRUE ~ "Other"
+)) # Grouping States based off preliminary modelling results
+
+quarterly.d2 <- merge(quarterly.d2, gas_perstate[c("quarter", "risk_state_name", "automotivegas", "gas_used")], by = c("quarter", "risk_state_name"))
+
+#Extra predictor of Claim No/Quarter
+
+quartclaim <- quarterly.d1 %>%
+  group_by(quarter) %>% summarise(QuarterlyClaim = sum(Claim_number))
+
+quarterly.d2 <- full_join(quarterly.d2, quartclaim, by = "quarter")
+
+quarterly.d2 <- merge(quarterly.d2, quarterly.d1[c("policy_id", "quarter", "Claim_number")], by = c("quarter", "policy_id"))
+dependence <- quarterly.d2 %>% group_by(Claim_number) %>% summarise(meansev = mean(Mean_claim_amount))
+
+
+# Training and test data set - Frequency data set
+training_d1 <- quarterly.d1$Date < as.Date("2020-07-31")
+d1.train <- quarterly.d1[training_d1,]
+d1.test <- quarterly.d1[!training_d1,]
+
+
+# Training Data set - Severity data set
+training_d2 <- quarterly.d2$Date < as.Date("2020-07-31")
+d2.train <- quarterly.d2[training_d2,]
+d2.test <- quarterly.d2[!training_d2,]
+
+
