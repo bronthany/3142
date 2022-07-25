@@ -1,0 +1,44 @@
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(data.table)
+library(tidyr)
+library(stringr)
+library(Metrics)
+library(AER)
+library(pscl)
+library(MASS)
+
+data <- read.csv("ACTL31425110AssignmentData2022.csv", header = TRUE, stringsAsFactors = TRUE)
+importindex <- read.csv("import.index.csv", header = TRUE)
+CPI <- read.csv("CPI_data.csv", header = TRUE)
+petrol_prices <- read.csv("petrol_price_quarter.csv", header = TRUE)
+gas_consumption <- read.csv("petrol and diesel consumption.csv", header = TRUE)
+gas <- read.csv("gas.csv", header = TRUE)
+motor_sales <- read.csv("motor_vehicle_sales.csv", header = TRUE)
+gold <- read.csv("GoldData.csv", header = TRUE)
+road_deaths <- read.csv("Road_Deaths.csv", header = TRUE)
+unemployment <- read.csv("unemploymentrate.csv", header = TRUE)
+maintenance <- read.csv("data_petrol.csv", header = TRUE)
+USDAUD <- read.csv("PriceHistoryAUDUSD.csv", header = TRUE)
+JPYAUD <- read.csv("PriceHistoryJPYAUD.csv", header = TRUE)
+CNYAUD <- read.csv("PriceHistoryCNYAUD.csv", header = TRUE)
+
+data$accident_month <- as.Date(data$accident_month)
+data$claim_loss_date <- as.Date(data$claim_loss_date)
+data$term_start_date <- as.Date(data$term_start_date)
+data$term_expiry_date <- as.Date(data$term_expiry_date)
+summary(data)
+
+
+#### CLEANING ####
+data <- data.table(data)
+data <- data[!duplicated(data),] # Duplicates removed
+data$total_claims_cost[is.na(data$total_claims_cost)] <- 0 #Convert NA's to 0
+data[, quarter := year(data$accident_month) + quarter(data$accident_month)*0.1] # Add year.quarter
+data <- data %>% mutate(vehicle_risk = case_when(
+  vehicle_class %in% c("Class 2", "Class 4", "Class 5", "Class 9", "Class 15") ~ "Low Risk Vehicle",
+  vehicle_class %in% c("Class 1", "Class 6", "Class 7", "Class 8", "Class 10") ~ "Medium Risk Vehicle",
+  TRUE ~ "High Risk Vehicle"
+)) # Add Vehicle Risk Class (i.e. combining Vehicle Classes)
+data$vehicle_risk <- as.factor(data$vehicle_risk)
