@@ -1,0 +1,68 @@
+library(class)
+library(caret)
+library(devtools)
+library(countreg)
+library(forcats)
+
+# Splitting into Test and Training Sets
+# Frequency
+
+training.d1 <- quarterly.d1$quarter < 2020.3
+d1.train <- quarterly.d1[training.d1, ]
+d1.test <- quarterly.d1[!training.d1,]
+
+  # 80% split
+data_partition <- createDataPartition(quarterly.d1$Claim_number, times = 1,p = 0.8,list = FALSE)
+str(data_partition)
+d1.train80 <- quarterly.d1[data_partition,]
+d1.test20 <- quarterly.d2[-data_partition,]
+
+#Severity
+training.d2 <- quarterly.d2$quarter < 2020.3
+d2.train <- quarterly.d2[training.d2,]
+d2.test <- quarterly.d2[!training.d2,]
+
+  # 80% split
+d2.80 <- c(1:(0.8*length(quarterly.d2$quarter)))
+d2.train80 <- quarterly.d2[d2.80, ]
+d2.test20 <- quarterly.d2[-d2.80,]
+
+### K-FOLD CV for Time Series Data ###
+
+# Function that calculates RMSE of final prediction
+rootmse <- function(model, testset, trainingset){
+  
+  test <- predict(model, newdata = testset, type = "response")  # Prediction for Test set
+  train <- predict(model, newdata = trainingset, type = "response")  # Prediction for Training set
+  
+  testset <- data.table(testset)
+  testset <- testset[, pred := test   # Summarise predictions and actual claims by quarter for validation set
+  ][, .(real_claims = sum(Claim_number), pred_claims = sum(pred), Date = last(Date)), by = .(quarter)]
+  
+  trainingset <- data.table(trainingset)
+  trainingset <- trainingset[, pred := train   # Summarise predictions and actual claims by quarter for training set
+  ][, .(real_claims = sum(Claim_number), pred_claims = sum(pred), Date = last(Date)), by = .(quarter)]
+  
+  rmse <- data.table("Training RMSE" = sqrt(mean((trainingset$real_claims - trainingset$pred_claims)^2)),
+                     "Test RMSE" = sqrt(mean(testset$real_claims - testset$pred_claims)^2))
+  return(rmse)
+}
+# Using K = 10, split data set into 10 folds.
+Date <- unique(quarterly.d1$Date) # 20 quarters. 
+split <- rep(1:10, each = 2, length.out = 20) # Using K = 10, split into 10 groups, with each being a half year
+split <- cbind(Date, split)
+
+kfold_freq <- merge(quarterly.d1, split, by = "Date")
+kfold_sev <- merge(quarterly.d2, split, by = "Date")
+
+
+
+
+##### FREQUENCY MODELLING #####
+# Zero-inflated negative binomial
+zinb <- zeroinfl(Claim_number ~ vehicle_risk + lag_petrol_price + vehicle_sales
+                  + policy_tenure + lag_gold + region,
+                   data = d1.train80, offset = log(exposure), dist = "negbin",link = "logit")
+AIC(zinb) # 54445.13
+summary(zinb)
+rootmse(zinb, d1.test, d1.train)
