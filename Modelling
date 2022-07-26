@@ -6,27 +6,28 @@ library(forcats)
 # Splitting into Test and Training Sets
 # Frequency
 
-training.d1 <- quarterly.d1$quarter < 2020.3
-d1.train <- quarterly.d1[training.d1, ]
-d1.test <- quarterly.d1[!training.d1,]
+precovid <- quarterly.d1$quarter < 2020.3
+d1.precovid <- quarterly.d1[training.d1, ]
+d1.covid <- quarterly.d1[!training.d1,]
 
   # 80% split
 set.seed(1)
-data_partition <- createDataPartition(quarterly.d1$Claim_number, times = 1,p = 0.8,list = FALSE)
+data_partition1 <- createDataPartition(quarterly.d1$Claim_number, times = 1,p = 0.8,list = FALSE)
 str(data_partition)
 d1.train80 <- quarterly.d1[data_partition,]
 d1.test20 <- quarterly.d2[-data_partition,]
 
 #Severity
-training.d2 <- quarterly.d2$quarter < 2020.3
-d2.train <- quarterly.d2[training.d2,]
-d2.test <- quarterly.d2[!training.d2,]
+precovid<- quarterly.d2$quarter < 2020.3
+d2.precovid <- quarterly.d2[training.d2,]
+d2.covid <- quarterly.d2[!training.d2,]
 
   # 80% split
 set.seed(1)
 data_partition2 <- createDataPartition(quarterly.d2$Mean_claim_amount, times = 1,p = 0.8,list = FALSE)
 d2.train80 <- quarterly.d2[data_partition2, ]
 d2.test20 <- quarterly.d2[-data_partition2,]
+
 
 ### K-FOLD CV for Time Series Data ###
 
@@ -98,24 +99,24 @@ for(i in 1:5){
 zinbCV
 
 # Visualisation for COVID prediction
-zinb.testpred <- predict(zinb, newdata = d1.test, type = "response") # Testset prediction
-zinb.trainpred <- predict(zinb, newdata = d1.train, type = "response") # Training set prediction
+zinb.covid <- predict(zinb, newdata = d1.covid, type = "response") # Testset prediction
+zinb.precovid <- predict(zinb, newdata = d1.precovid, type = "response") # Training set prediction
 
-zinb.testpred <- d1.test %>%
-  mutate(pred = zinb.testpred) %>%
+zinb.covid <- d1.test %>%
+  mutate(pred = zinb.covid) %>%
   group_by(quarter) %>%
   summarise(real_claims = sum(Claim_number),
             pred_claims = sum(pred),
             Date = last(Date))
 
-zinb.trainpred <- d1.train %>%
-  mutate(pred = zinb.trainpred) %>%
+zinb.precovid <- d1.train %>%
+  mutate(pred = zinb.precovid) %>%
   group_by(quarter) %>%
   summarise(real_claims = sum(Claim_number),
             pred_claims = sum(pred),
             Date = last(Date))
 
-zinb.visual<- rbind(zinb.trainpred, zinb.testpred)
+zinb.visual<- rbind(zinb.precovid, zinb.covid)
 zinb.visual$Date <- as.Date(zinb.visual$Date)
 
 ggplot(zinb.visual, aes(Date, pred_claims, group = 1, color = "Predicted")) +
