@@ -47,9 +47,9 @@ rootmse <- function(model, testset, trainingset){
                      "Test RMSE" = sqrt(mean(testset$real_claims - testset$pred_claims)^2))
   return(rmse)
 }
-# Using K = 10, split data set into 10 folds.
+# Using K = 5, split data set into 5 folds.
 Date <- unique(quarterly.d1$Date) # 20 quarters. 
-split <- rep(1:10, each = 2, length.out = 20) # Using K = 10, split into 10 groups, with each being a half year
+split <- rep(1:5, each = 4, length.out = 20) # Using K = 5, split into 5 groups, with each being a full year
 split <- cbind(Date, split)
 
 kfold_freq <- merge(quarterly.d1, split, by = "Date")
@@ -59,10 +59,76 @@ kfold_sev <- merge(quarterly.d2, split, by = "Date")
 
 
 ##### FREQUENCY MODELLING #####
-# Zero-inflated negative binomial
+## Backward selection - zeroinflated model (takes a long time)
+full.model <- zeroinfl(Claim_number ~ vehicle_risk + vehicle_sales + road_deaths+
+                         risk_state_name + policy_tenure + lag_petrol_price + lag_unemployment +
+                         USDAUD + JPYAUD + CNYAUD + gold + petrol_price + manufacture +
+                         lag_gold + unemployment + maintenance_index + region + q,
+                       data = d1.train80,dist = "negbin",link= "logit")
+
+step.model <- stepAIC(full.model, direction = "backward", 
+                      trace = FALSE)
+summary(step.model)
+
+# Zero-inflated negative binomial model
 zinb <- zeroinfl(Claim_number ~ vehicle_risk + lag_petrol_price + vehicle_sales
-                  + policy_tenure + lag_gold + region,
+                  + policy_tenure + lag_gold + region + maintenance_index + q,
                    data = d1.train80, offset = log(exposure), dist = "negbin",link = "logit")
-AIC(zinb) # 54445.13
-summary(zinb)
+AIC(zinb) # 54433.55
 rootmse(zinb, d1.test, d1.train)
+
+# Run 5-fold Cross Validation
+zinbCV <- data.table("Training RMSE" = numeric(), "Test RMSE" = numeric()) # Create empty table to store results
+for(i in 1:5){
+  training <- kfold_freq[which(kfold_freq$split <= i), ] 
+  test <- kfold_freq[which(kfold_freq$split == i+1), ]
+  
+  model <- zeroinfl(Claim_number ~ vehicle_risk + lag_petrol_price + vehicle_sales
+                    + policy_tenure + lag_gold + region + maintenance_index + q,
+                    data = d1.train80, offset = log(exposure), dist = "negbin",link = "logit")
+  print(summary(model))
+  
+  zinbCV <- rbind(zinbCV, rootmse(model, test, training))
+}
+zinbCV
+
+# Visualisation for COVID prediction
+zinb.testpred <- predict(zinb, newdata = d1.test, type = "response") # Testset prediction
+zinb.trainpred <- predict(zinb, newdata = d1.train, type = "response") # Training set prediction
+
+zinb.testpred <- d1.test %>%
+  mutate(pred = zinb.testpred) %>%
+  group_by(quarter) %>%
+  summarise(real_claims = sum(Claim_number),
+            pred_claims = sum(pred),
+            Date = last(Date))
+
+zinb.trainpred <- d1.train %>%
+  mutate(pred = zinb.trainpred) %>%
+  group_by(quarter) %>%
+  summarise(real_claims = sum(Claim_number),
+            pred_claims = sum(pred),
+            Date = last(Date))
+
+zinb.visual<- rbind(zinb.trainpred, zinb.testpred)
+zinb.visual$Date <- as.Date(zinb.visual$Date)
+
+ggplot(zinb.visual, aes(Date, pred_claims, group = 1, color = "Predicted")) +
+  geom_rect(data = zinb.visual, 
+            aes(xmin = as.Date("2020-09-01"), xmax = as.Date("2021-06-01"), ymin = 250, ymax = Inf, color = NULL), fill = "grey", alpha = 0.1, show.legend = FALSE) +
+  geom_line() +
+  geom_line(aes(y = real_claims, group = 1, color = "Actual")) +
+  labs(y = "Claim Frequency", title = "Covid-19 Prediction") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+
+# RESULTS:
+# AIC = 54433.55
+# Variables in model: vehicle risk, lag petrol price, vehicle sales, policy tenure, lag gold, region, quarter, maintenance index
+# #    Training RMSE Test RMSE
+# 1:      13.55503  5.037127
+# 2:      16.26040 14.596606
+# 3:      19.11666  9.407096
+# 4:      18.06297  5.555799
+
+
