@@ -12,6 +12,7 @@ d1.train <- quarterly.d1[training.d1, ]
 d1.test <- quarterly.d1[!training.d1,]
 
   # 80% split
+set.seed(1)
 data_partition <- createDataPartition(quarterly.d1$Claim_number, times = 1,p = 0.8,list = FALSE)
 str(data_partition)
 d1.train80 <- quarterly.d1[data_partition,]
@@ -23,9 +24,10 @@ d2.train <- quarterly.d2[training.d2,]
 d2.test <- quarterly.d2[!training.d2,]
 
   # 80% split
-d2.80 <- c(1:(0.8*length(quarterly.d2$quarter)))
-d2.train80 <- quarterly.d2[d2.80, ]
-d2.test20 <- quarterly.d2[-d2.80,]
+set.seed(1)
+data_partition2 <- createDataPartition(quarterly.d2$Mean_claim_amount, times = 1,p = 0.8,list = FALSE)
+d2.train80 <- quarterly.d2[data_partition2, ]
+d2.test20 <- quarterly.d2[-data_partition2,]
 
 ### K-FOLD CV for Time Series Data ###
 
