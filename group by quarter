@@ -1,3 +1,0 @@
-quarterly_claims_cost <- d2 %>% 
-  group_by(quarter=floor_date(accident_month, "quarter")) %>%
-  summarize(amount=sum(total_claims_cost))
