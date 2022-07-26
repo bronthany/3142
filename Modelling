@@ -1,7 +1,6 @@
 library(class)
 library(caret)
 library(devtools)
-library(countreg)
 library(forcats)
 
 # Splitting into Test and Training Sets
