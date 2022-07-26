@@ -57,8 +57,12 @@ kfold_sev <- merge(quarterly.d2, split, by = "Date")
 
 
 
-
+###############################
 ##### FREQUENCY MODELLING #####
+###############################
+
+### ZERO-INFLATED NEGBINOM MODEL ###
+
 ## Backward selection - zeroinflated model (takes a long time)
 full.model <- zeroinfl(Claim_number ~ vehicle_risk + vehicle_sales + road_deaths+
                          risk_state_name + policy_tenure + lag_petrol_price + lag_unemployment +
@@ -132,3 +136,92 @@ ggplot(zinb.visual, aes(Date, pred_claims, group = 1, color = "Predicted")) +
 # 4:      18.06297  5.555799
 
 
+### POISSON REGRESSION ###
+# Backward Selection
+
+full.model.poisson <- glm(Claim_number ~ policy_tenure + vehicle_risk + sum_insured + year_of_manufacture + 
+                            region + q + lag_petrol_price + vehicle_sales + loggas + lag_gold + road_deaths + unemployment + 
+                           maintenance_index + state_level, data = d1.train80, 
+                          family = "poisson", offset = log(exposure))
+step.model.poi <- step(full.model.poisson, direction = "backward") # 56727
+summary(step.model.poi)
+
+# # Variables: Claim_number ~ policy_tenure + vehicle_risk + sum_insured + year_of_manufacture + region + q + lag_petrol_price + lag_gold + 
+#   unemployment + state_level
+
+# 5-fold CV
+poissonCV <- data.table("Training RMSE" = numeric(), "Test RMSE" = numeric()) # Create empty table to store results
+for(i in 1:4){
+  training <- kfold_freq[which(kfold_freq$split <= i), ] 
+  test <- kfold_freq[which(kfold_freq$split == i+1), ]
+  
+  model <- glm(formula = Claim_number ~ policy_tenure + vehicle_risk + sum_insured + 
+                 year_of_manufacture + region + q + lag_petrol_price + lag_gold + 
+                 unemployment + state_level, family = "poisson", data = training, 
+               offset = log(exposure))
+  
+  print(summary(model))
+  
+  poissonCV <- rbind(poissonCV, rootmse(model, test, training))
+}
+poissonCV
+
+# DISPERSION TEST
+dispersiontest(step.model.poi, trafo = 1) # Overdispersed data. alpha = 0.2981353 > 0, p-value < 2.2e-16
+
+
+# RESULTS:
+# AIC = 56727
+#   Training RMSE   Test RMSE
+# 1:  2.770139e-06  27.90123
+# 2:  3.621912e+00 103.52296
+# 3:  1.133934e+01  41.53338
+# 4:  1.321645e+01  48.91434
+# Overdispersed data
+
+
+
+### NEGATIVE BINOMIAL ###
+# Backward Selection
+full.model.nb <- glm.nb(Claim_number ~ policy_tenure + vehicle_risk + sum_insured + year_of_manufacture + 
+                          region + q + lag_petrol_price + vehicle_sales + automotivegas + lag_gold + road_deaths + unemployment + 
+                          maintenance_index + state_level, data = d1.train80, offset = log(exposure), control = glm.control(maxit=10000))
+step.model.nb <- step(full.model.nb, direction = "backward") # 54423
+summary(step.model.nb)
+
+# # # Variables: Claim_number ~ policy_tenure + vehicle_risk + 
+# sum_insured + year_of_manufacture + region + q + lag_petrol_price + 
+#   lag_gold + unemployment + state_level
+
+
+# 5-fold CV
+nbCV <- data.table("Training RMSE" = numeric(), "Test RMSE" = numeric()) # Create empty table to store results
+for(i in 1:4){
+  training <- kfold_freq[which(kfold_freq$split <= i), ] 
+  test <- kfold_freq[which(kfold_freq$split == i+1), ]
+  
+  model <- glm.nb(formula = Claim_number ~ policy_tenure + vehicle_risk + 
+                    sum_insured + year_of_manufacture + region + q + lag_petrol_price + 
+                    lag_gold + unemployment + state_level, data = training, 
+                  control = glm.control(maxit = 10000), offset = log(exposure))
+  
+  print(summary(model))
+  
+  nbCV <- rbind(nbCV, rootmse(model, test, training))
+}
+nbCV
+
+# Results:
+# AIC: 54423
+#    Training RMSE Test RMSE
+# 1:      1.189836  28.45283
+# 2:      4.051800  91.01293
+# 3:     11.414171  42.45041
+# 4:     13.301320  44.71127
+
+
+
+
+##############################
+##### SEVERITY MODELLING #####
+##############################
