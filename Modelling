@@ -140,13 +140,13 @@ ggplot(zinb.visual, aes(Date, pred_claims, group = 1, color = "Predicted")) +
 # Backward Selection
 
 full.model.poisson <- glm(Claim_number ~ policy_tenure + vehicle_risk + sum_insured + year_of_manufacture + 
-                            region + q + lag_petrol_price + vehicle_sales + loggas + lag_gold + road_deaths + unemployment + 
+                            region + seasonality + lag_petrol_price + vehicle_sales + loggas + lag_gold + road_deaths + unemployment + 
                            maintenance_index + state_level, data = d1.train80, 
                           family = "poisson", offset = log(exposure))
 step.model.poi <- step(full.model.poisson, direction = "backward") # 56727
 summary(step.model.poi)
 
-# # Variables: Claim_number ~ policy_tenure + vehicle_risk + sum_insured + year_of_manufacture + region + q + lag_petrol_price + lag_gold + 
+# # Variables: Claim_number ~ policy_tenure + vehicle_risk + sum_insured + year_of_manufacture + region + seasonality + lag_petrol_price + lag_gold + 
 #   unemployment + state_level
 
 # 5-fold CV
