@@ -225,6 +225,21 @@ ggplot(data.region2, aes(x = Date, y = freqprop , color = region)) + # FREQUENCY
         plot.title = element_text(size = 10, hjust = 0.5))
 
 
+# Vehicle Risk EDA
+
+vehicle <- data.eda[, .(total = sum(total_claims_cost), policies = length(unique(policy_id))),
+                    by = .(vehicle_class)][, risk := total/policies]
+vehicle <- vehicle[order(vehicle$risk),][, group := as.factor(rep(1:3, each = 5))]
+
+ggplot(vehicle, aes(x = vehicle_class, y = risk, fill = group)) +
+  geom_col() + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, margin = margin(t = 10), size = 10),
+        axis.title.y = element_text(margin = margin(r = 10), size = 10),
+        plot.title = element_text(size = 10, hjust = 0.5)) +
+  labs(x = "Vehicle Class", y = "Expected Loss per Policy", title = "3 Distinct Risk Classes",
+       fill = "Risk Classes") +
+  scale_fill_discrete(labels = c("Low Risk", "Medium Risk", "High Risk"))
+
 
 
 
