@@ -27,10 +27,22 @@ set.seed(1)
 data_partition2 <- createDataPartition(quarterly.d2$Mean_claim_amount, times = 1,p = 0.8,list = FALSE)
 d2.train80 <- quarterly.d2[data_partition2, ]
 
-
 ### K-FOLD CV for Time Series Data ###
 
-# Function that calculates RMSE of final prediction
+# Using K = 5, split data set into 5 folds.
+Date <- unique(quarterly.d1$Date) # 20 quarters. 
+split <- rep(1:5, each = 4, length.out = 20) # Using K = 5, split into 5 groups, with each being a full year
+split <- cbind(Date, split)
+
+kfold_freq <- merge(quarterly.d1, split, by = "Date")
+kfold_sev <- merge(quarterly.d2, split, by = "Date")
+
+
+###############################
+##### FREQUENCY MODELLING #####
+###############################
+
+# Function that calculates RMSE of final prediction - Frequency
 rootmse <- function(model, testset, trainingset){
   
   test <- predict(model, newdata = testset, type = "response")  # Prediction for Test set
@@ -48,19 +60,6 @@ rootmse <- function(model, testset, trainingset){
                      "Test RMSE" = sqrt(mean(testset$real_claims - testset$pred_claims)^2))
   return(rmse)
 }
-# Using K = 5, split data set into 5 folds.
-Date <- unique(quarterly.d1$Date) # 20 quarters. 
-split <- rep(1:5, each = 4, length.out = 20) # Using K = 5, split into 5 groups, with each being a full year
-split <- cbind(Date, split)
-
-kfold_freq <- merge(quarterly.d1, split, by = "Date")
-kfold_sev <- merge(quarterly.d2, split, by = "Date")
-
-
-
-###############################
-##### FREQUENCY MODELLING #####
-###############################
 
 ### ZERO-INFLATED NEGBINOM MODEL ###
 
@@ -225,3 +224,57 @@ nbCV
 ##############################
 ##### SEVERITY MODELLING #####
 ##############################
+
+# Function that calculates RMSE of final prediction - Severity
+rootmse_sev <- function(model, testset, trainingset){
+  
+  test <- predict(model, newdata = testset, type = "response")  # Prediction for Test set
+  train <- predict(model, newdata = trainingset, type = "response")  # Prediction for Training set
+  
+  testset <- data.table(testset)
+  testset <- testset[, pred := test   # Summarise predictions and actual claims by quarter for validation set
+  ][, .(real_size = mean(Mean_claim_amount), pred_size = mean(pred), Date = last(Date)), by = .(quarter)]
+  
+  trainingset <- data.table(trainingset)
+  trainingset <- trainingset[, pred := train   # Summarise predictions and actual claims by quarter for training set
+  ][, .(real_size = mean(Mean_claim_amount), pred_size = mean(pred), Date = last(Date)), by = .(quarter)]
+  
+  rmse <- data.table("Training RMSE" = sqrt(mean((trainingset$real_size - trainingset$pred_size)^2)),
+                     "Test RMSE" = sqrt(mean(testset$real_size - testset$pred_size)^2))
+  return(rmse)
+}
+
+### GAMMA GAM MODEL ###
+
+## Backward selection - Gamma GAM model 
+full.model.gam <- gam(Mean_claim_amount ~ state_group + sum_insured + vehicle_risk + QuarterlyClaim + year_of_manufacture + petrol_price + road_deaths +  
+               maintenance_index + USDAUD + season + region, data = d2.train80, family = Gamma(link = "log"))
+               
+scope_list = list("state_group"=~1+state_group,"sum_insured"=~1+sum_insured+s(sum_insured,3)+s(sum_insured,4)+s(sum_insured,5)+s(sum_insured,8)+s(sum_insured,9)+s(sum_insured,10)+s(sum_insured,11),
+                  "vehicle_risk"=~1+vehicle_risk,
+                  "year_of_manufacture"=~1+year_of_manufacture+s(year_of_manufacture,3)+s(year_of_manufacture,4)+s(year_of_manufacture,5)+s(year_of_manufacture,10)+s(year_of_manufacture,11)+s(year_of_manufacture,12)+s(year_of_manufacture,13),
+                  "petrol_price"=~1+petrol_price+s(petrol_price,3)+s(petrol_price,4)+s(petrol_price,5),
+                  "road_deaths"=~1+road_deaths+s(road_deaths,3)+s(road_deaths,4)+s(road_deaths,5),
+                  "USDAUD"=~1+USDAUD+s(USDAUD,3)+s(USDAUD,4)+s(USDAUD,5),
+                  "maintenance_index"=~1+maintenance_index+s(maintenance_index,3)+s(maintenance_index,4)+s(maintenance_index,5),
+                  "QuarterlyClaim"=~1+QuarterlyClaim+s(QuarterlyClaim,3)+s(QuarterlyClaim,4)+s(QuarterlyClaim,5),
+                  "season"=~1+season, "region"=~1+region)
+
+step.model.gam <- step.Gam(full.model.gam, scope = scope_list, direction="both")
+summary(step.model.gam)
+
+# Gamma GAM Model
+GAMmod <- gam(Mean_claim_amount ~ state_group + s(sum_insured, 9) + vehicle_risk + s(year_of_manufacture, 3) + petrol_price + maintenance_index + region, 
+        family = Gamma(link = "log"), data = d2.train80, trace = FALSE)
+AIC(GAMmod) # 98737.24
+rootmse(GAMmod, d1.test, d1.train)
+
+
+
+
+
+
+
+
+
+
