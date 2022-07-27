@@ -2,6 +2,16 @@ library(class)
 library(caret)
 library(devtools)
 library(forcats)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(data.table)
+library(tidyr)
+library(actuar)
+library(stringr)
+library(gam)
+
+theme_set(theme_bw())
 
 ## Splitting into Test and Training Sets
 # Frequency
@@ -125,7 +135,10 @@ ggplot(zinb.visual, aes(Date, pred_claims, group = 1, color = "Predicted")) +
   geom_line() +
   geom_line(aes(y = real_claims, group = 1, color = "Actual")) +
   labs(y = "Claim Frequency", title = "Covid-19 Prediction") +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  theme(axis.title.x = element_text(margin = margin(t = 10), size = 10),
+        axis.title.y = element_text(margin = margin(r = 10), size = 10),
+        plot.title = element_text(size = 10, hjust = 0.5), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1), 
+        legend.title = element_blank())
 
 # RESULTS:
 # AIC = 54433.55
@@ -336,10 +349,78 @@ ggplot(gam.visual, aes(Date, pred_size, group = 1, color = "Predicted")) +
 # 4:      328.7131  395.0547
 
 
+### LOG-LINKED GAUSSIAN REGRESSION ###
+# Backward Selection
+
+full.model.gauss <- glm(Mean_claim_amount ~ state_group + sum_insured + vehicle_risk + CPI_index + QuarterlyClaim + year_of_manufacture + petrol_price + road_deaths +  maintenance_index 
+              + USDAUD + season + region, data = d2.train80, family = gaussian(link = "log"))
+              
+step.model.gauss <- step(full.model.gauss, direction = "both") # 105895.7
+summary(step.model.gauss)
+
+# Variables: state group, sum insured, vehicle risk, year of manufacture, maintenance index, region
+
+# 5-fold CV
+gaussianCV <- data.table("Training RMSE" = numeric(), "Test RMSE" = numeric()) # Create empty table to store results
+for(i in 1:4){
+  training <- kfold_sev[which(kfold_sev$split <= i), ] 
+  test <- kfold_sev[which(kfold_sev$split == i+1), ]
+  
+  model <- glm(Mean_claim_amount ~ state_group + sum_insured + vehicle_risk + year_of_manufacture + maintenance_index + region, 
+               data = training, family = gaussian(link = "log"))
+  print(summary(model))
+  
+  gaussianCV <- rbind(gaussianCV, rootmse_sev(model, test, training))
+}
+gaussianCV
+print(mean(gaussianCV$`Test RMSE`[1:3]))
+print(mean(gaussianCV$`Test RMSE`[4]))
 
 
+# RESULTS:
+# AIC = 105895.7
+##    Training RMSE Test RMSE
+# 1:      259.3058  646.7083
+# 2:      265.5724  609.7830
+# 3:      361.3940  885.1748
+# 4:      372.1005  100.0105
 
 
+### GAMMA REGRESSION ###
+# Backward Selection
+
+full.model.gamma <- glm(Mean_claim_amount ~ state_group + sum_insured + vehicle_risk + CPI_index + year_of_manufacture + petrol_price + vehicle_sales + road_deaths +  maintenance_index 
+              + USDAUD + season + region, data = d2.train80, family = Gamma(link = "log"))
+              
+step.model.gamma <- step(full.model.gamma, direction = "both") # 98875.28
+summary(step.model.gamma)
+
+# Variables: state group, sum insured, vehicle risk, year of manufacture, petrol price, maintenance index, region
+
+# 5-fold CV
+gammaCV <- data.table("Training RMSE" = numeric(), "Test RMSE" = numeric()) # Create empty table to store results
+for(i in 1:4){
+  training <- kfold_sev[which(kfold_sev$split <= i), ] 
+  test <- kfold_sev[which(kfold_sev$split == i+1), ]
+  
+  model <- glm(Mean_claim_amount ~ state_group + sum_insured + vehicle_risk + year_of_manufacture + maintenance_index + region, 
+               data = training, family = Gamma(link = "log"))
+  print(summary(model))
+  
+  gammaCV <- rbind(gammaCV, rootmse_sev(model, test, training))
+}
+gammaCV
+print(mean(gammaCV$`Test RMSE`[1:3]))
+print(mean(gammaCV$`Test RMSE`[4]))
+
+
+# RESULTS:
+# AIC = 98875.28
+##     Training RMSE Test RMSE
+# 1:      188.6984  268.1837
+# 2:      256.8484  305.3437
+# 3:      421.6380  154.8868
+# 4:      495.6167  185.6869
 
 
 
