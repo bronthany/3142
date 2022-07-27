@@ -101,14 +101,14 @@ zinbCV
 zinb.covid <- predict(zinb, newdata = d1.covid, type = "response") # Testset prediction
 zinb.precovid <- predict(zinb, newdata = d1.precovid, type = "response") # Training set prediction
 
-zinb.covid <- d1.test %>%
+zinb.covid <- d1.covid %>%
   mutate(pred = zinb.covid) %>%
   group_by(quarter) %>%
   summarise(real_claims = sum(Claim_number),
             pred_claims = sum(pred),
             Date = last(Date))
 
-zinb.precovid <- d1.train %>%
+zinb.precovid <- d1.precovid %>%
   mutate(pred = zinb.precovid) %>%
   group_by(quarter) %>%
   summarise(real_claims = sum(Claim_number),
@@ -125,7 +125,6 @@ ggplot(zinb.visual, aes(Date, pred_claims, group = 1, color = "Predicted")) +
   geom_line(aes(y = real_claims, group = 1, color = "Actual")) +
   labs(y = "Claim Frequency", title = "Covid-19 Prediction") +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-
 
 # RESULTS:
 # AIC = 54433.55
