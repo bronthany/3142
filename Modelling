@@ -95,6 +95,8 @@ for(i in 1:5){
   zinbCV <- rbind(zinbCV, rootmse(model, test, training))
 }
 zinbCV
+print(mean(zinbCV$`Test RMSE`[1:3]))
+print(mean(zinbCV$`Test RMSE`[4]))
 
 # Visualisation for COVID prediction
 zinb.covid <- predict(zinb, newdata = d1.covid, type = "response") # Testset prediction
@@ -164,6 +166,8 @@ for(i in 1:4){
   poissonCV <- rbind(poissonCV, rootmse(model, test, training))
 }
 poissonCV
+print(mean(poissonCV$`Test RMSE`[1:3]))
+print(mean(poissonCV$`Test RMSE`[4]))
 
 # DISPERSION TEST
 dispersiontest(step.model.poi, trafo = 1) # Overdispersed data. alpha = 0.2981353 > 0, p-value < 2.2e-16
@@ -209,6 +213,8 @@ for(i in 1:4){
   nbCV <- rbind(nbCV, rootmse(model, test, training))
 }
 nbCV
+print(mean(nbCV$`Test RMSE`[1:3]))
+print(mean(nbCV$`Test RMSE`[4]))
 
 # Results:
 # AIC: 54423
@@ -267,7 +273,67 @@ summary(step.model.gam)
 GAMmod <- gam(Mean_claim_amount ~ state_group + s(sum_insured, 9) + vehicle_risk + s(year_of_manufacture, 3) + petrol_price + maintenance_index + region, 
         family = Gamma(link = "log"), data = d2.train80, trace = FALSE)
 AIC(GAMmod) # 98737.24
-rootmse(GAMmod, d1.test, d1.train)
+rootmse_sev(GAMmod, d1.covid, d1.precovid)
+#Train RMSE: 356.10
+#Test RMSE : 2.76
+
+# Run 5-fold Cross Validation
+gamCV <- data.table("Training RMSE" = numeric(), "Test RMSE" = numeric()) # Create empty table to store results
+for(i in 1:4){
+  training <- kfold_sev[which(kfold_sev$split <= i), ] 
+  test <- kfold_sev[which(kfold_sev$split == i+1), ]
+  
+  model <- gam(Mean_claim_amount ~ state_group + s(sum_insured, 9) + vehicle_risk + s(year_of_manufacture,3) + petrol_price + maintenance_index + region, 
+               data = training, family = Gamma(link = "log"))
+  #print(summary(model))
+  
+  gamCV <- rbind(gamCV, rootmse_sev(model, test, training))
+}
+gamCV
+print(mean(gamCV$`Test RMSE`[1:3]))
+print(mean(gamCV$`Test RMSE`[4]))
+
+# Visualisation for COVID prediction
+gam.covid <- predict(GAMmod, newdata = d2.covid, type = "response") # Testset prediction
+gam.precovid <- predict(GAMmod, newdata = d2.precovid, type = "response") # Training set prediction
+
+gam.covid <- d2.covid %>%
+  mutate(pred = gam.covid) %>%
+  group_by(quarter) %>%
+  summarise(real_size = mean(Mean_claim_amount),
+            pred_size = mean(pred),
+            Date = last(Date))
+
+gam.precovid <- d2.precovid %>%
+  mutate(pred = gam.precovid) %>%
+  group_by(quarter) %>%
+  summarise(real_size = mean(Mean_claim_amount),
+            pred_size = mean(pred),
+            Date = last(Date))
+
+gam.visual<- rbind(gam.precovid, gam.covid)
+gam.visual$Date <- as.Date(gam.visual$Date)
+
+ggplot(gam.visual, aes(Date, pred_size, group = 1, color = "Predicted")) +
+  geom_rect(data = gam.visual, 
+            aes(xmin = as.Date("2020-09-01"), xmax = as.Date("2021-06-01"), ymin = 4000, ymax = Inf, color = NULL), fill = "grey", alpha = 0.1, show.legend = FALSE) +
+  geom_line() +
+  geom_line(aes(y = real_size, group = 1, color = "Actual")) +
+  labs(y = "Claim Severity", 
+       title = "COVID-19 Prediction") +
+  theme(axis.title.x = element_text(margin = margin(t = 10), size = 10),
+        axis.title.y = element_text(margin = margin(r = 10), size = 10),
+        plot.title = element_text(size = 10, hjust = 0.5), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1), 
+        legend.title = element_blank())
+        
+# RESULTS:
+# AIC = 98737.24
+# Variables in model: state group, sum insured, vehicle risk, year of manufacture, petrol price, maintenance index, region
+# #    Training RMSE Test RMSE
+# 1:      218.6169  387.7916
+# 2:      238.7924  164.0737
+# 3:      234.7318  101.1698
+# 4:      328.7131  395.0547
 
 
 
