@@ -271,12 +271,12 @@ quarterly.d1 <- d1 %>%
             vehicle_risk = last(vehicle_risk),
             sum_insured = last(sum_insured),
             year_of_manufacture = last(year_of_manufacture),
-            region = last(region))
+            region = last(region),
+            q = last(Season))
 
 hist(quarterly.d1$Claim_number)
-table(quarterly.d1$Claim_number)  
-#     0      1      2      3      4      5      6 
-# 390180   5481    869     49     43      1      3 
+table(quarterly.d1$Claim_number)  #  0      1      2      3      4      5      6 
+                              # 390180   5481    869     49     43      1      3 
 
 # Combining External data -- #
 quarterly.d1 <- merge(quarterly.d1, external[, !colnames(external) %in% severity], by = "quarter")
@@ -289,8 +289,7 @@ quarterly.d1 <- quarterly.d1 %>%
 
 quarterly.d1 <- merge(quarterly.d1, gas_perstate[c("quarter", "risk_state_name", "automotivegas", "gas_used")], by = c("quarter", "risk_state_name"))
 
-
-### SEVERITY ###
+#### SEVERITY DATA TRANSFORMATION ####
 
 # Change Severity Data set into quarters, remove no claim entries
 d2 <- data %>% filter(total_claims_cost != 0) # Severity data set only has claims
@@ -299,12 +298,12 @@ quarterly.d2 <- d2 %>%
   summarise(Mean_claim_amount = mean(total_claims_cost),
             risk_state_name = last(risk_state_name),
             vehicle_class = last(vehicle_class),
-            vehicle_risk = last(vehicle_risk),
             policy_tenure = last(policy_tenure),
             sum_insured = last(sum_insured),
             year_of_manufacture = last(year_of_manufacture),
+            vehicle_risk = last(vehicle_risk),
             region = last(region))
-quarterly.d2 <- quarterly.d2[quarterly.d2$Mean_claim_amount < quantile(quarterly.d2$Mean_claim_amount,0.99),]
+quarterly.d2 <- quarterly.d2[quarterly.d2$Mean_claim_amount < quantile(quarterly.d2$Mean_claim_amount,0.99),] # Remove outliers
 ggplot(quarterly.d2, aes(x = Mean_claim_amount)) +
   geom_histogram(fill = "black", colour = "black", binwidth = 2000)
 
@@ -319,14 +318,11 @@ quarterly.d2 <- quarterly.d2 %>% mutate(state_group = case_when(
 
 quarterly.d2 <- merge(quarterly.d2, gas_perstate[c("quarter", "risk_state_name", "automotivegas", "gas_used")], by = c("quarter", "risk_state_name"))
 
-#Extra predictor of Claim No/Quarter
-
 quartclaim <- quarterly.d1 %>%
   group_by(quarter) %>% summarise(QuarterlyClaim = sum(Claim_number))
 
 quarterly.d2 <- full_join(quarterly.d2, quartclaim, by = "quarter")
 
 quarterly.d2 <- merge(quarterly.d2, quarterly.d1[c("policy_id", "quarter", "Claim_number")], by = c("quarter", "policy_id"))
-dependence <- quarterly.d2 %>% group_by(Claim_number) %>% summarise(meansev = mean(Mean_claim_amount))
 
 
