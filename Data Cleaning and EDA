@@ -95,7 +95,9 @@ external <- merge(external, motor_sales, by = "quarter")
 gold[c("Day", "Month", "Year")] <- str_split_fixed(gold$Quarter, "/", 3)  # Split date into time periods
 gold[c("quarter")] <- as.numeric(gold$Year) + 0.1*(as.numeric(gold$Month)/3) + 2000 # Transform dates to year.quarter
 colnames(gold)[2] <- "gold" 
-external <- merge(external, gold[c("quarter", "gold")], by = "quarter")
+gold[c("lag_gold")] <- lag(gold$gold) # Lag Gold
+external <- merge(external, gold[c("quarter", "gold", "lag_gold")], by = "quarter")
+
 
 
 # Merge Road Deaths data
