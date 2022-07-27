@@ -215,7 +215,7 @@ data.region.quarter <- data.eda[, .(totalclaims = sum(total_claims_cost),
                                   by = .(region, quarter)
                                   ][, severity := totalclaims/frequency
                                     ][, freqprop := frequency/policies]
-ggplot(data.region2, aes(x = Date, y = severity , color = region)) + # SEVERITY
+ggplot(data.region.quarter, aes(x = Date, y = severity , color = region)) + # SEVERITY
   geom_line() +
   labs(title = "Each Region follows their own Trend", x = "Date", y = "Frequency per person") +
   theme(axis.title.x = element_text(margin = margin(t = 10), size = 10),
@@ -223,7 +223,7 @@ ggplot(data.region2, aes(x = Date, y = severity , color = region)) + # SEVERITY
         plot.title = element_text(size = 10, hjust = 0.5))
 
 
-ggplot(data.region2, aes(x = Date, y = freqprop , color = region)) + # FREQUENCY
+ggplot(data.region.quarter, aes(x = Date, y = freqprop , color = region)) + # FREQUENCY
   geom_line() + 
   labs(title = "Major Cities have highest frequency followed by Remote", x = "Date", y = "Frequency per person") +
   theme(axis.title.x = element_text(margin = margin(t = 10), size = 10),
