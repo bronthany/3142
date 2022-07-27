@@ -3,30 +3,29 @@ library(caret)
 library(devtools)
 library(forcats)
 
-# Splitting into Test and Training Sets
+## Splitting into Test and Training Sets
 # Frequency
 
 precovid <- quarterly.d1$quarter < 2020.3
-d1.precovid <- quarterly.d1[training.d1, ]
-d1.covid <- quarterly.d1[!training.d1,]
+d1.precovid <- quarterly.d1[precovid, ]
+d1.covid <- quarterly.d1[!precovid,]
 
   # 80% split
 set.seed(1)
 data_partition1 <- createDataPartition(quarterly.d1$Claim_number, times = 1,p = 0.8,list = FALSE)
 str(data_partition)
-d1.train80 <- quarterly.d1[data_partition,]
-d1.test20 <- quarterly.d2[-data_partition,]
+d1.train80 <- quarterly.d1[data_partition1,]
+d1.test20 <- quarterly.d2[-data_partition1,]
 
 #Severity
 precovid<- quarterly.d2$quarter < 2020.3
-d2.precovid <- quarterly.d2[training.d2,]
-d2.covid <- quarterly.d2[!training.d2,]
+d2.precovid <- quarterly.d2[precovid,]
+d2.covid <- quarterly.d2[!precovid,]
 
   # 80% split
 set.seed(1)
 data_partition2 <- createDataPartition(quarterly.d2$Mean_claim_amount, times = 1,p = 0.8,list = FALSE)
 d2.train80 <- quarterly.d2[data_partition2, ]
-d2.test20 <- quarterly.d2[-data_partition2,]
 
 
 ### K-FOLD CV for Time Series Data ###
