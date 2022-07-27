@@ -44,6 +44,12 @@ data <- data %>% mutate(vehicle_risk = case_when(
 )) # Add Vehicle Risk Class (i.e. combining Vehicle Classes)
 data$vehicle_risk <- as.factor(data$vehicle_risk)
 
+#Creating Seasonality Predictor
+seasonality <- function(period){
+  time <- (period-floor(period))*10
+  return(time)
+}
+
 ### EXTERNAL DATA ####
 # Merge CPI and Import Index
 CPI <- rbind(CPI, data.frame(X = 21, Date = "2021-06-01", CPI.Index = 118.8))
