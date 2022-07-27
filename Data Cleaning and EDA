@@ -49,6 +49,7 @@ seasonality <- function(period){
   time <- (period-floor(period))*10
   return(time)
 }
+data <- data[,Season:= paste("Q",as.character(round(seasonality(data$quarter),1)), sep="")]
 
 ### EXTERNAL DATA ####
 # Merge CPI and Import Index
