@@ -247,14 +247,11 @@ ggplot(vehicle, aes(x = vehicle_class, y = risk, fill = group)) +
 
 
 
-### FREQUENCY ###
-
-# Cleaning
 d1 <- data
-d1$Indicator <- ifelse(!d1$total_claims_cost == 0, 1, 0) #Indicator, 1 if claim, 0 if no claim
+d1$Indicator <- ifelse(!d1$total_claims_cost == 0, 1, 0) # Indicator, 1 if claim, 0 if no claim
 d1 <- d1 %>% 
   group_by(policy_id, accident_month) %>%
-  mutate(Claim_number = sum(Indicator))# Calculate total claim number per month per policy
+  mutate(Claim_number = sum(Indicator)) # Calculate total claim number per month per policy
 d1 <- d1[!d1$exposure == 0,] # Remove 0 exposure entries
 
 # Transforming frequency dataset to quarterly data
@@ -270,7 +267,8 @@ quarterly.d1 <- d1 %>%
             sum_insured = last(sum_insured),
             year_of_manufacture = last(year_of_manufacture),
             region = last(region),
-            q = last(Season))
+            q = last(Season),
+            Date = max(accident_month))
 
 hist(quarterly.d1$Claim_number)
 table(quarterly.d1$Claim_number)  #  0      1      2      3      4      5      6 
@@ -300,7 +298,8 @@ quarterly.d2 <- d2 %>%
             sum_insured = last(sum_insured),
             year_of_manufacture = last(year_of_manufacture),
             vehicle_risk = last(vehicle_risk),
-            region = last(region))
+            region = last(region),
+            Date = max(accident_month))
 quarterly.d2 <- quarterly.d2[quarterly.d2$Mean_claim_amount < quantile(quarterly.d2$Mean_claim_amount,0.99),] # Remove outliers
 ggplot(quarterly.d2, aes(x = Mean_claim_amount)) +
   geom_histogram(fill = "black", colour = "black", binwidth = 2000)
@@ -318,6 +317,10 @@ quarterly.d2 <- merge(quarterly.d2, gas_perstate[c("quarter", "risk_state_name",
 
 quartclaim <- quarterly.d1 %>%
   group_by(quarter) %>% summarise(QuarterlyClaim = sum(Claim_number))
+
+quarterly.d2 <- full_join(quarterly.d2, quartclaim, by = "quarter")
+
+quarterly.d2 <- merge(quarterly.d2, quarterly.d1[c("policy_id", "quarter", "Claim_number")], by = c("quarter", "policy_id"))
 
 quarterly.d2 <- full_join(quarterly.d2, quartclaim, by = "quarter")
 
