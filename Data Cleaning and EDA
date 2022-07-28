@@ -25,6 +25,7 @@ JPYAUD <- read.csv("PriceHistoryJPYAUD.csv", header = TRUE)
 CNYAUD <- read.csv("PriceHistoryCNYAUD.csv", header = TRUE)
 regions <- read.csv("postcodes.csv", header = TRUE, stringsAsFactors = TRUE)
 
+
 data$accident_month <- as.Date(data$accident_month)
 data$claim_loss_date <- as.Date(data$claim_loss_date)
 data$term_start_date <- as.Date(data$term_start_date)
@@ -49,9 +50,12 @@ seasonality <- function(period){
   time <- (period-floor(period))*10
   return(time)
 }
+
 data <- data[,Season:= paste("Q",as.character(round(seasonality(data$quarter),1)), sep="")]
 
+
 ### EXTERNAL DATA ####
+
 # Merge CPI and Import Index
 CPI <- rbind(CPI, data.frame(X = 21, Date = "2021-06-01", CPI.Index = 118.8))
 external <- merge(CPI, importindex, by = "Date")
@@ -59,17 +63,18 @@ cor(external$CPI.Index, external$Index.numbers) # 0.7475
 
 external <- external %>%
   mutate(quarter = year(Date) + quarter(Date)*0.1) %>%
-  dplyr::select(-c(X)) %>%
-  dplyr::rename("import_index" = Index.numbers,
-         "CPI_index" = CPI.Index) %>% # Convert date to year.quarter
+  dplyr :: select(-c(X)) %>%
+  rename("import_index" = Index.numbers,
+         "CPI_index" = CPI.Index) %>%   # Convert date to year.quarter
   mutate("lag_CPI_index" = lag(CPI_index)) # Add lagged CPI by 1 quarter
+ 
 
 # Merge Petrol Prices 
 names(petrol_prices)[2] = "quarter"
 petrol_prices <- petrol_prices %>%
   mutate("lag_petrol_price" = lag(petrol_price)) # Add lagged petrol price by 1 quarter
-external <- merge(external, petrol_prices[, -1], by = "quarter")
 
+external <- merge(external, petrol_prices[, -1], by = "quarter")
 
 # Merge Motor Vehicle Sales
 motor_sales[c("Month", "Year")] <- str_split_fixed(motor_sales$Date, "-", 2)
@@ -77,78 +82,25 @@ motor_sales[c("quarter")] <- ifelse(motor_sales$Month == "Jan" | motor_sales$Mon
                                     ifelse(motor_sales$Month == "Apr" | motor_sales$Month == "May" | motor_sales$Month == "Jun", 2,
                                            ifelse(motor_sales$Month == "Jul" | motor_sales$Month == "Aug" | motor_sales$Month == "Sep", 3,
                                                   ifelse(motor_sales$Month == "Oct" | motor_sales$Month == "Nov" | motor_sales$Month == "Dec", 4, NA)))
-)
+                                    )
 motor_sales[c("quarter")] <- motor_sales$quarter * 0.1 + as.numeric(motor_sales$Year)
-
-# Data is monthly. Sum motor vehicle sales by quarter to get quarterly value
+  # Data is monthly. Sum motor vehicle sales by quarter to get quarterly value
 motor_sales <- motor_sales %>% 
   group_by(quarter) %>%
   summarise(Units = sum(Units)) %>%
-  dplyr::rename("vehicle_sales" = Units) %>%
+  rename("vehicle_sales" = Units) %>%
   mutate("lag_vehicle_sales" = lag(vehicle_sales))
-
-# Merge into external data set
+  # Merge into external data set
 external <- merge(external, motor_sales, by = "quarter")
-
-
-# Merge Gold data
-gold[c("Day", "Month", "Year")] <- str_split_fixed(gold$Quarter, "/", 3)  # Split date into time periods
-gold[c("quarter")] <- as.numeric(gold$Year) + 0.1*(as.numeric(gold$Month)/3) + 2000 # Transform dates to year.quarter
-colnames(gold)[2] <- "gold" 
-gold[c("lag_gold")] <- lag(gold$gold) # Lag Gold
-external <- merge(external, gold[c("quarter", "gold", "lag_gold")], by = "quarter")
-
-
-
-# Merge Road Deaths data
-road_deaths[c("Day", "Month", "Year")] <- str_split_fixed(road_deaths$Quarter, "/", 3)  # Split date into time periods
-road_deaths[c("quarter")] <- as.numeric(road_deaths$Year) + 0.1*(as.numeric(road_deaths$Month)/3) # Transform dates to year.quarter
-colnames(road_deaths)[2] <- "road_deaths"
-external <- merge(external, road_deaths[c("quarter", "road_deaths")], by = "quarter")
-
-
-
-# Merge Unemployment data
-unemployment[c("Day", "Month", "Year")] <- str_split_fixed(unemployment$Quarter, "/", 3)  # Split date into time periods
-unemployment[c("quarter")] <- as.numeric(unemployment$Year) + 0.1*(as.numeric(unemployment$Month)/3) # Transform dates to year.quarter
-colnames(unemployment)[2] <- "unemployment"
-external <- merge(external, unemployment[c("quarter", "unemployment")], by = "quarter")
-
-# Merge Maintenance and Repair Index
-maintenance[c("Day", "Month", "Year")] <- str_split_fixed(maintenance$Date, "/", 3)  # Split date into time periods
-maintenance[c("quarter")] <- as.numeric(maintenance$Year) + 2000 + 0.1*(as.numeric(maintenance$Month)/3) # Transform dates to year.quarter
-colnames(maintenance)[8] <- "maintenance_index"
-external <- merge(external, maintenance[c("quarter", "maintenance_index")], by = "quarter")
-
-# Merge USD/AUD exchange rate
-USDAUD[c("Month", "Day", "Year")] <- str_split_fixed(USDAUD$Date, "/", 3)  # Split date into time periods
-USDAUD[c("quarter")] <- as.numeric(USDAUD$Year) + 2000 + 0.1*(as.numeric(USDAUD$Month)/3) # Transform dates to year.quarter
-colnames(USDAUD)[2] <- "USDAUD"
-external <- merge(external, USDAUD[c("quarter", "USDAUD")], by = "quarter")
-
-
-# Merge JPY/AUD exchange rate
-JPYAUD[c("Month", "Day", "Year")] <- str_split_fixed(JPYAUD$Date, "/", 3)  # Split date into time periods
-JPYAUD[c("quarter")] <- as.numeric(JPYAUD$Year) + 2000 + 0.1*(as.numeric(JPYAUD$Month)/3) # Transform dates to year.quarter
-colnames(JPYAUD)[2] <- "JPYAUD"
-external <- merge(external, JPYAUD[c("quarter", "JPYAUD")], by = "quarter")
-
-
-# Merge CNY/AUD exchange rate
-CNYAUD[c("Month", "Day", "Year")] <- str_split_fixed(CNYAUD$Date, "/", 3)  # Split date into time periods
-CNYAUD[c("quarter")] <- as.numeric(CNYAUD$Year) + 2000 + 0.1*(as.numeric(CNYAUD$Month)/3) # Transform dates to year.quarter
-colnames(CNYAUD)[2] <- "CNYAUD"
-external <- merge(external, CNYAUD[c("quarter", "CNYAUD")], by = "quarter")
-
 
 # Merge Diesel and Petrol Consumption
 summary(gas_perstate)
 
 gas_perstate[c("Month", "Year")] <- str_split_fixed(gas_perstate$Month, "-", 2)
 gas_perstate[c("quarter")] <- ifelse(gas_perstate$Month == "Jan" | gas_perstate$Month == "Feb" | gas_perstate$Month == "Mar", 1,
-                                        ifelse(gas_perstate$Month == "Apr" | gas_perstate$Month == "May" | gas_perstate$Month == "Jun", 2,
-                                               ifelse(gas_perstate$Month == "Jul" | gas_perstate$Month == "Aug" | gas_perstate$Month == "Sep", 3,
-                                                      ifelse(gas_perstate$Month == "Oct" | gas_perstate$Month == "Nov" | gas_perstate$Month == "Dec", 4, NA)))
+                                     ifelse(gas_perstate$Month == "Apr" | gas_perstate$Month == "May" | gas_perstate$Month == "Jun", 2,
+                                            ifelse(gas_perstate$Month == "Jul" | gas_perstate$Month == "Aug" | gas_perstate$Month == "Sep", 3,
+                                                   ifelse(gas_perstate$Month == "Oct" | gas_perstate$Month == "Nov" | gas_perstate$Month == "Dec", 4, NA)))
 )
 gas_perstate[c("quarter")] <- gas_perstate$quarter * 0.1 + as.numeric(gas_perstate$Year) + 2000
 
@@ -173,11 +125,53 @@ gas <- gas %>%
          loggas = log(gas))
 external <- merge(external, gas[c("quarter", "gas_change", "standardgas", "loggas")], by = "quarter")
 
+# Merge Gold data
+gold[c("Day", "Month", "Year")] <- str_split_fixed(gold$Quarter, "/", 3)  # Split date into time periods
+gold[c("quarter")] <- as.numeric(gold$Year) + 0.1*(as.numeric(gold$Month)/3) + 2000 # Transform dates to year.quarter
+colnames(gold)[2] <- "gold" 
+gold[c("lag_gold")] <- lag(gold$gold) # Lag Gold
+external <- merge(external, gold[c("quarter", "gold", "lag_gold")], by = "quarter")
+
+# Merge Road Deaths data
+road_deaths[c("Day", "Month", "Year")] <- str_split_fixed(road_deaths$Quarter, "/", 3)  # Split date into time periods
+road_deaths[c("quarter")] <- as.numeric(road_deaths$Year) + 0.1*(as.numeric(road_deaths$Month)/3) # Transform dates to year.quarter
+colnames(road_deaths)[2] <- "road_deaths"
+external <- merge(external, road_deaths[c("quarter", "road_deaths")], by = "quarter")
+
+# Merge Unemployment data
+unemployment[c("Day", "Month", "Year")] <- str_split_fixed(unemployment$Quarter, "/", 3)  # Split date into time periods
+unemployment[c("quarter")] <- as.numeric(unemployment$Year) + 0.1*(as.numeric(unemployment$Month)/3) # Transform dates to year.quarter
+colnames(unemployment)[2] <- "unemployment"
+unemployment[c("lag_unemployment")] <- lag(unemployment$unemployment) # Lag unemployment
+external <- merge(external, unemployment[c("quarter", "unemployment", "lag_unemployment")], by = "quarter")
+
+# Merge Maintenance and Repair Index
+maintenance[c("Day", "Month", "Year")] <- str_split_fixed(maintenance$Date, "/", 3)  # Split date into time periods
+maintenance[c("quarter")] <- as.numeric(maintenance$Year) + 2000 + 0.1*(as.numeric(maintenance$Month)/3) # Transform dates to year.quarter
+colnames(maintenance)[8] <- "maintenance_index"
+external <- merge(external, maintenance[c("quarter", "maintenance_index")], by = "quarter")
+
+# Merge USD/AUD exchange rate
+USDAUD[c("Month", "Day", "Year")] <- str_split_fixed(USDAUD$Date, "/", 3)  # Split date into time periods
+USDAUD[c("quarter")] <- as.numeric(USDAUD$Year) + 2000 + 0.1*(as.numeric(USDAUD$Month)/3) # Transform dates to year.quarter
+colnames(USDAUD)[2] <- "USDAUD"
+external <- merge(external, USDAUD[c("quarter", "USDAUD")], by = "quarter")
+
+# Merge JPY/AUD exchange rate
+JPYAUD[c("Month", "Day", "Year")] <- str_split_fixed(JPYAUD$Date, "/", 3)  # Split date into time periods
+JPYAUD[c("quarter")] <- as.numeric(JPYAUD$Year) + 2000 + 0.1*(as.numeric(JPYAUD$Month)/3) # Transform dates to year.quarter
+colnames(JPYAUD)[2] <- "JPYAUD"
+external <- merge(external, JPYAUD[c("quarter", "JPYAUD")], by = "quarter")
+
+# Merge CNY/AUD exchange rate
+CNYAUD[c("Month", "Day", "Year")] <- str_split_fixed(CNYAUD$Date, "/", 3)  # Split date into time periods
+CNYAUD[c("quarter")] <- as.numeric(CNYAUD$Year) + 2000 + 0.1*(as.numeric(CNYAUD$Month)/3) # Transform dates to year.quarter
+colnames(CNYAUD)[2] <- "CNYAUD"
+external <- merge(external, CNYAUD[c("quarter", "CNYAUD")], by = "quarter")
 
 # Frequency vs Severity variables
-freq <- c()
-severity <- c("CPI_index", "import_index", "lag_CPI_index")
-
+freq <- c("Date")
+severity <- c("Date")
 
 # Assign Postcodes to each Region
 regions <- regions %>% mutate(region = case_when(
@@ -201,6 +195,8 @@ data <- data %>%
     TRUE ~ as.numeric(risk_postcode)
   ))
 data <- merge(data, postcode, by = c("risk_postcode"))
+
+
 
 
 #################
