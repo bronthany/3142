@@ -245,6 +245,39 @@ ggplot(vehicle, aes(x = vehicle_class, y = risk, fill = group)) +
   scale_fill_discrete(labels = c("Low Risk", "Medium Risk", "High Risk"))
 
 
+# Policytenure
+summary(data.eda$policy_tenure)
+ggplot(data.eda, aes(x = policy_tenure)) +
+  geom_histogram(binwidth = 1, colour = "white", fill = 'purple') + 
+  xlab("Policy Tenure") +
+  ylab("Frequency of Claims") + 
+  labs(title = "Frequency of Claims by Policy Tenure")
+#0 and 1 are highest freq, decreasing each year
+
+plot(data.eda$policy_tenure, data.eda$total_claims_cost) # No clear trend, possible downward trend
+
+# Quantitative exploration: Trend with mean claims for each policy tenure
+policytenure <- data.eda %>%
+  group_by(policy_tenure) %>%
+  summarise(mean_claims = mean(total_claims_cost),
+            Freq = n())
+plot(policytenure$policy_tenure, policytenure$mean_claims,
+     xlab = "Policy Tenure", ylab = "Mean Claim Amount") # No clear trend. Younger policies have generally higher means
+
+# Proportion of policies resulting in claims by tenure
+proportion <- data %>%
+  group_by(policy_tenure) %>%
+  summarise(Freq = n())
+
+proportion.by.tenure <- policytenure$Freq / proportion$Freq[1:36]
+plot(policytenure$policy_tenure, proportion.by.tenure,
+     xlab = "Policy Tenure", ylab = "Proportion of Policies Claiming")
+
+plot(proportion$policy_tenure, proportion$Freq)
+
+
+
+#### FREQUENCY DATA TRANSFORMATION ####
 
 
 d1 <- data
