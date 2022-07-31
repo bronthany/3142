@@ -1,0 +1,48 @@
+####### Frequency Model #######
+
+zinb <- zeroinfl(Claim_number ~ vehicle_risk + lag_petrol_price + vehicle_sales
+                  + policy_tenure + lag_gold + region + maintenance_index + q,
+                   data = d1.train80, offset = log(exposure), dist = "negbin",link = "logit")
+       
+       
+###### Severity Model ######
+
+GAMmod <- gam(Mean_claim_amount ~ state_group + s(sum_insured, 9) + vehicle_risk + s(year_of_manufacture, 3) + petrol_price + maintenance_index + region, 
+        family = Gamma(link = "log"), data = d2.train80, trace = FALSE)
+        
+        
+###### Aggregate Model - Multiplying Frequency and Severity ######
+
+aggregate <- data %>%
+  group_by(quarter) %>%
+  summarise(Date = max(accident_month),
+            TotalClaims = sum(total_claims_cost))
+
+# Combining severity and frequency prediction
+quarterly.d1 <- quarterly.d1 %>% mutate(state_group = case_when(
+  risk_state_name == "NSW" ~ "NSW",
+  risk_state_name == "VIC" ~ "VIC",
+  risk_state_name == "QLD" ~ "QLD",
+  TRUE ~ "Other"
+))
+
+f <- predict(zinb, newdata = quarterly.d1, type = "response")
+s <- predict(GAMmod, newdata = quarterly.d1, type = "response")
+a <- cbind(quarterly.d1, f, s)
+a <- a %>%
+  mutate(PredictedTotalClaims = f*s) %>%
+  group_by(quarter) %>%
+  summarise(PredictedTotalClaims = sum(PredictedTotalClaims))
+  
+# Calculating Claim Inflation
+inflation <- aggregate %>%
+  mutate(split = rep(1:5, each = 4)) %>%
+  group_by(split) %>%
+  summarise(TotalClaims = sum(TotalClaims),
+            Prediction = sum(PredictedTotalClaims),
+            Date = max(Date)) %>%
+  mutate(Inflation = (TotalClaims / lag(TotalClaims) - 1)*100,
+         PredInflation = (Prediction / lag(TotalClaims)-1)*100)
+         
+inflation[5,]  
+  
