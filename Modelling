@@ -419,3 +419,178 @@ print(mean(gammaCV$`Test RMSE`[4]))
 
 
 
+###########################
+## AGGREGATE CLAIM MODEL ##
+###########################
+
+aggregate <- data %>%
+  group_by(quarter) %>%
+  summarise(Date = max(accident_month),
+            TotalClaims = sum(total_claims_cost))
+ggplot(aggregate, aes(x = Date, y = TotalClaims)) +
+  geom_line() +
+  labs(x = "Date", y = "Total Claims", title = "Women")
+
+# Combining severity and frequency prediction
+quarterly.d1 <- quarterly.d1 %>% mutate(state_group = case_when(
+  risk_state_name == "NSW" ~ "NSW",
+  risk_state_name == "VIC" ~ "VIC",
+  risk_state_name == "QLD" ~ "QLD",
+  TRUE ~ "Other"
+))
+
+f <- predict(zinb, newdata = quarterly.d1, type = "response")
+s <- predict(GAMmod, newdata = quarterly.d1, type = "response")
+a <- cbind(quarterly.d1, f, s)
+a <- a %>%
+  mutate(PredictedTotalClaims = f*s) %>%
+  group_by(quarter) %>%
+  summarise(PredictedTotalClaims = sum(PredictedTotalClaims))
+
+aggregate <- merge(aggregate, a, by = "quarter")
+
+ggplot(aggregate, aes(x = Date, y = TotalClaims, group = 1)) +
+  geom_rect(data = aggregate, 
+            aes(xmin = as.Date("2020-07-01"), xmax = as.Date("2021-07-01"), ymin = 1800000, ymax = Inf, color = NULL), fill = "grey", alpha = 0.1, show.legend = FALSE) +
+  geom_line() +
+  geom_line(aes(color = "Actual")) +
+  geom_line(aes(y = PredictedTotalClaims, group = 1, color = "Predicted")) +
+  labs(x = "Date", y = "Total Claims", title = "Total Claims COVID-19 Prediction") +
+  theme(axis.title.x = element_text(margin = margin(t = 10), size = 10),
+        axis.title.y = element_text(margin = margin(r = 10), size = 10),
+        plot.title = element_text(size = 10, hjust = 0.5))
+  
+# Finding claims inflation:
+inflation <- aggregate %>%
+  mutate(split = rep(1:5, each = 4)) %>%
+  group_by(split) %>%
+  summarise(TotalClaims = sum(TotalClaims),
+            Prediction = sum(PredictedTotalClaims),
+            Date = max(Date)) %>%
+  mutate(Inflation = (TotalClaims / lag(TotalClaims) - 1)*100,
+         PredInflation = (Prediction / lag(TotalClaims)-1)*100)
+
+
+ggplot(inflation, aes(x = Date, y = Inflation)) +
+  geom_line() + 
+  geom_line(aes(y = PredInflation, color = "blue"))
+
+  # Percentage:
+inflation[5,]
+
+# Comparison to internal Variables only
+internal_sev <- gam(Mean_claim_amount ~ state_group + s(sum_insured,9) + s(year_of_manufacture,12)
+               + region, data = d2.train80, family = Gamma(link = "log"))
+
+internal_freq <- zeroinfl(Claim_number ~ vehicle_risk + policy_tenure + lag_gold + maintenance_index + year_of_manufacture + sum_insured,
+                          data = d1.train80, offset = log(exposure), dist = "negbin",link = "logit")
+internalmodel <- data %>%
+  group_by(quarter) %>%
+  summarise(Date = max(accident_month),
+            TotalClaims = sum(total_claims_cost))
+
+f <- predict(internal_freq, newdata = quarterly.d1, type = "response")
+s <- predict(internal_sev, newdata = quarterly.d1, type = "response")
+a <- cbind(quarterly.d1, f, s)
+a <- a %>%
+  mutate(PredictedTotalClaims = f*s) %>%
+  group_by(quarter) %>%
+  summarise(PredictedTotalClaims = sum(PredictedTotalClaims))
+
+internalmodel <- merge(internalmodel, a, by = "quarter")
+
+ggplot(internalmodel, aes(x = Date, y = TotalClaims, group = 1)) +
+  geom_rect(data = internalmodel, 
+            aes(xmin = as.Date("2020-07-01"), xmax = as.Date("2021-07-01"), ymin = 1800000, ymax = Inf, color = NULL), fill = "grey", alpha = 0.1, show.legend = FALSE) +
+  geom_line() +
+  geom_line(aes(color = "Actual")) +
+  geom_line(aes(y = PredictedTotalClaims, group = 1, color = "Predicted")) +
+  labs(x = "Date", y = "Total Claims", title = "COVID-19 Prediction using Internal Variables") +
+  theme(axis.title.x = element_text(margin = margin(t = 10), size = 10),
+        axis.title.y = element_text(margin = margin(r = 10), size = 10),
+        plot.title = element_text(size = 10, hjust = 0.5))
+
+# Finding claims inflation:
+inflation <- internalmodel %>%
+  mutate(split = rep(1:5, each = 4)) %>%
+  group_by(split) %>%
+  summarise(TotalClaims = sum(TotalClaims),
+            Prediction = sum(PredictedTotalClaims),
+            Date = max(Date)) %>%
+  mutate(Inflation = (TotalClaims / lag(TotalClaims) - 1)*100,
+         PredInflation = (Prediction / lag(TotalClaims)-1)*100)
+inflation[5,]
+
+
+#### FORECAST FOR 2022 ####
+# Petrol_price, maintenance index, gold, vehicle sales
+forecast_petrol <- subset(petrol_prices[petrol_prices$quarter > 2021.2,], select = -X)
+forecast_maintenance <- maintenance[maintenance$quarter > 2021.2, c("quarter", "maintenance_index")]
+forecast_gold <- gold[gold$quarter > 2021.2, c("quarter", "lag_gold")]
+forecast_vehicle <- motor_sales[motor_sales$quarter > 2021.2, c("quarter", "vehicle_sales")]
+
+
+# Forecasting maintenance index: using CPI as a guide
+forecast <- data.frame("quarter" = 2022.2, "maintenance_index" = 126.0)
+forecast_maintenance <- rbind(forecast_maintenance, forecast)
+
+# Forecasting vehicle sales: Q
+forecast <- data.frame("quarter" = 2022.2, "vehicle_sales" = 200000)
+forecast_vehicle <- rbind(forecast_vehicle, forecast)
+
+# Forecasting Internal Variables: Assuming that the customer base is exactly the same
+forecast <- quarterly.d1[quarterly.d1$quarter > 2020.2, ]
+forecast <- forecast %>%
+  mutate(quarter = quarter + 1,
+         Date = as.Date(Date) %m+% years(1)) %>%
+  dplyr :: select(-c(lag_gold, maintenance_index, petrol_price, lag_petrol_price, vehicle_sales))
+forecast <- merge(forecast, forecast_gold, by = "quarter")
+forecast <- merge(forecast, forecast_maintenance, by = "quarter")
+forecast <- merge(forecast, forecast_petrol, by = "quarter")
+forecast <- merge(forecast, forecast_vehicle, by = "quarter")
+
+
+## Total Claims Prediction ##
+update(zinb, data = quarterly.d1)
+update(mod31, data = quarterly.d2)
+
+f <- predict(zinb, newdata = forecast, type = "response")
+s <- predict(mod31, newdata = forecast, type = "response")
+a <- cbind(forecast, f, s)
+a <- a %>%
+  mutate(PredictedTotalClaims = f*s) %>%
+  group_by(quarter) %>%
+  summarise(Date = max(as.Date(Date)),
+            PredictedTotalClaims = sum(PredictedTotalClaims)) %>%
+  mutate(TotalClaims = NA)
+
+aggregate <- rbind(aggregate, a)
+forecast2022 <- c(aggregate$TotalClaims[1:20], aggregate$PredictedTotalClaims[21:24])
+aggregate <- cbind(aggregate, forecast2022)
+aggregate <- aggregate %>%
+  mutate(pred = quarter > 2021.1)
+
+
+ggplot(aggregate, aes(x = Date, y = forecast2022, group = 1, color = pred)) +
+  geom_line() +
+  labs(x = "Date", y = "Total Claims", title = "2022 Total Claim Prediction with Forecasted External Variables") +
+  theme(axis.title.x = element_text(margin = margin(t = 10), size = 10),
+        axis.title.y = element_text(margin = margin(r = 10), size = 10),
+        plot.title = element_text(size = 10, hjust = 0.5), legend.position = "none")
+
+
+# Finding claims inflation:
+inflation <- aggregate %>%
+  mutate(split = rep(1:6, each = 4)) %>%
+  group_by(split) %>%
+  summarise(TotalClaims = sum(TotalClaims),
+            Prediction = sum(PredictedTotalClaims),
+            Date = max(Date)) %>%
+  mutate(Inflation = (TotalClaims / lag(TotalClaims) - 1)*100,
+         PredInflation = (Prediction / lag(TotalClaims)-1)*100)
+
+inflation[6,]
+
+
+
+
