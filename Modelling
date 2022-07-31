@@ -160,14 +160,6 @@ ggplot(zinb.visual, aes(Date, pred_claims, group = 1, color = "Predicted")) +
         plot.title = element_text(size = 10, hjust = 0.5), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1), 
         legend.title = element_blank())
 
-# RESULTS:
-# AIC = 54433.55
-# Variables in model: vehicle risk, lag petrol price, vehicle sales, policy tenure, lag gold, region, quarter, maintenance index
-# #    Training RMSE Test RMSE
-# 1:      13.55503  5.037127
-# 2:      16.26040 14.596606
-# 3:      19.11666  9.407096
-# 4:      18.06297  5.555799
 
 
 ### POISSON REGRESSION ###
@@ -206,15 +198,6 @@ print(mean(poissonCV$`Test RMSE`[4]))
 dispersiontest(step.model.poi, trafo = 1) # Overdispersed data. alpha = 0.2981353 > 0, p-value < 2.2e-16
 
 
-# RESULTS:
-# AIC = 56727
-#   Training RMSE   Test RMSE
-# 1:  2.770139e-06  27.90123
-# 2:  3.621912e+00 103.52296
-# 3:  1.133934e+01  41.53338
-# 4:  1.321645e+01  48.91434
-# Overdispersed data
-
 
 
 ### NEGATIVE BINOMIAL ###
@@ -248,15 +231,6 @@ for(i in 1:4){
 nbCV
 print(mean(nbCV$`Test RMSE`[1:3]))
 print(mean(nbCV$`Test RMSE`[4]))
-
-# Results:
-# AIC: 54423
-#    Training RMSE Test RMSE
-# 1:      1.189836  28.45283
-# 2:      4.051800  91.01293
-# 3:     11.414171  42.45041
-# 4:     13.301320  44.71127
-
 
 
 
